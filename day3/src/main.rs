@@ -1,7 +1,7 @@
 use std::{fs::File, io::{BufRead, BufReader}};
 use clap::{App, load_yaml};
 
-use day3::{Direction, directions_from_string, run};
+use day3::{Direction, directions_from_string, run_1, run_2};
 
 struct ParsePair {
     string: String,
@@ -65,7 +65,13 @@ fn main() {
     for mut pair in pairs {
         match pair.result {
             Ok(sequence) => {
-                let output = run(&sequence);
+                let part: u8 = if let Some(part) = matches.value_of("part") {
+                    part.parse().unwrap()
+                } else {
+                    1
+                };
+
+                let output = if part == 1 { run_1(&sequence) } else { run_2(&sequence) };
                 if pair.string.len() > 12 {
                     pair.string.truncate(9);
                     pair.string.push_str("...");
