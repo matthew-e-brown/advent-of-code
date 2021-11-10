@@ -9,7 +9,7 @@ pub enum Direction {
 }
 
 
-pub fn directions_from_string(string: &str) -> Result<Vec<Direction>, &str> {
+pub fn directions_from_string(string: &str) -> Result<Vec<Direction>, &'static str> {
     string.chars().map(|c| {
         match c {
             '^' => Ok(Direction::Up),

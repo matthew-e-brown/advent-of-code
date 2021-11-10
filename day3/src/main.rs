@@ -1,45 +1,79 @@
-use std::{env, process};
+use std::{fs::File, io::{BufRead, BufReader}};
+use clap::{App, load_yaml};
+
 use day3::{Direction, directions_from_string, run};
 
-
-struct Pair<'s> {
-    as_string: &'s str,
-    as_direct: Vec<Direction>,
+struct ParsePair {
+    string: String,
+    result: Result<Vec<Direction>, &'static str>,
 }
 
 
-fn process_args(args: &[String]) -> Result<Vec<Pair>, &str> {
-    if args.len() < 2 {
-        return Err("Please pass at least one sequence.");
+fn parse_args(matches: &clap::ArgMatches) -> Vec<ParsePair> {
+    let mut pairs = Vec::new();
+
+    // Parse raw input lines
+    if let Some(inputs) = matches.values_of("inputs") {
+        pairs.extend(inputs.map(|s| {
+            let result = directions_from_string(s);
+            ParsePair { string: s.to_owned(), result }
+        }));
     }
 
-    args[1..].iter().map(|as_string| {
-        match directions_from_string(as_string) {
-            Ok(as_direct) => Ok(Pair { as_string, as_direct }),
-            Err(e) => Err(e),
+    // Parse from files
+    if let Some(files) = matches.values_of("files") {
+        'outer: for file in files {
+            let handle = File::open(file);
+
+            if let Err(_) = handle {
+                pairs.push(ParsePair { string: file.to_owned(), result: Err("Error opening file.") });
+                continue;
+            }
+
+            let handle = handle.unwrap();
+            let reader = BufReader::new(handle);
+
+            for line in reader.lines() {
+                match line {
+                    Ok(string) => {
+                        let result = directions_from_string(&string);
+                        pairs.push(ParsePair { string, result });
+                    },
+                    Err(_) => {
+                        pairs.push(ParsePair { string: file.to_owned(), result: Err("Error reading file.") });
+                        continue 'outer;
+                    }
+                };
+            }
         }
-    }).collect()
+    }
+
+    pairs
 }
 
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
 
-    let sequences = process_args(&args[..]).unwrap_or_else(|err| {
-        eprintln!("Argument error: {}", err);
-        process::exit(1);
-    });
+    let pairs = parse_args(&matches);
 
-    let longest = sequences.iter().fold(0_usize, |acc, cur| {
-        let len = cur.as_string.len();
-        if len > acc { len } else { acc }
-    });
+    if pairs.len() < 1 {
+        panic!("Program ran without any args!");
+    }
 
-    for sequence in sequences.iter() {
-        let result = run(&sequence.as_direct);
-        println!(
-            "'{:>w$}' delivers presents to {} houses.",
-            sequence.as_string, result, w = longest
-        );
+    for mut pair in pairs {
+        match pair.result {
+            Ok(sequence) => {
+                let output = run(&sequence);
+                if pair.string.len() > 12 {
+                    pair.string.truncate(9);
+                    pair.string.push_str("...");
+                }
+
+                println!("Sequence {:>12}: results in {} houses getting presents.", pair.string, output);
+            },
+            Err(e) => eprintln!("{}: {}", pair.string, e),
+        }
     }
 }

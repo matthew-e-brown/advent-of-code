@@ -1,0 +1,27 @@
+name: Perfectly Spherical Houses in a Vacuum
+about: Advent of Code 2015, day 3
+author: Matthew Brown <matthew.e.brown.17@gmail.com>
+
+args:
+  - part:
+      help: "Which part of the AoC challenge to run"
+      long: "part"
+      short: "p"
+      takes_value: true
+      default_value: "1"
+      possible_values:
+          - "1"
+          - "2"
+
+  - inputs:
+      help: "One or more inputs to test"
+      multiple: true
+      required_unless: "files"
+
+  - files:
+      help: "A file to read one or more inputs from (one per line)"
+      long: "file"
+      short: "f"
+      multiple: true
+      value_name: "FILE"
+      required_unless: "inputs"
