@@ -79,23 +79,22 @@ pub fn run_2(sequence: &Vec<Direction>) -> usize {
 mod tests {
 
     use super::*;
+    use test_case::test_case;
 
-    #[test]
-    fn case_1() {
-        let sequence = directions_from_string(">").unwrap();
-        assert_eq!(run_1(&sequence), 2);
+    #[test_case(">",           2 ; "case 1")]
+    #[test_case("^>v<",        4 ; "case 2")]
+    #[test_case("^v^v^v^v^v",  2 ; "case 3")]
+    fn part_1(string: &str, result: usize) {
+        let sequence = directions_from_string(string).unwrap();
+        assert_eq!(run_1(&sequence), result);
     }
 
-    #[test]
-    fn case_2() {
-        let sequence = directions_from_string("^>v<").unwrap();
-        assert_eq!(run_1(&sequence), 4);
-    }
-
-    #[test]
-    fn case_3() {
-        let sequence = directions_from_string("^v^v^v^v^v").unwrap();
-        assert_eq!(run_1(&sequence), 2);
+    #[test_case("^v",           3 ; "case 1")]
+    #[test_case("^>v<",         3 ; "case 2")]
+    #[test_case("^v^v^v^v^v",  11 ; "case 3")]
+    fn part_2(string: &str, result: usize) {
+        let sequence = directions_from_string(string).unwrap();
+        assert_eq!(run_2(&sequence), result);
     }
 
 }
