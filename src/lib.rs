@@ -4,8 +4,13 @@ use std::io::{BufRead, BufReader};
 use clap::{App, Arg, ArgMatches};
 
 
+pub enum Part {
+    One,
+    Two,
+}
+
 pub struct Config {
-    pub part: u8,
+    pub part: Part,
     pub data: Vec<String>
 }
 
@@ -20,7 +25,8 @@ where
     let matches = app.get_matches();
 
     // 'part' has a default value of "1" and can only be one of&["1", "2"], so we unwrap and parse it
-    let part = matches.value_of("part").unwrap().parse().unwrap();
+    let part: u8 = matches.value_of("part").unwrap().parse().unwrap();
+    let part = if part == 1 { Part::One } else { Part::Two };
     let data = parse_matches(&matches);
 
     Config { part, data }
