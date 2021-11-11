@@ -9,25 +9,20 @@ fn main() {
         "Advent of Code 2015, day 3"
     );
 
-    for result in config.data {
-        match result {
-            Ok(string) => {
-                let mut display_string = string.clone();
+    for string in config.data {
+        let mut display_string = string.clone();
 
-                if display_string.len() > 12 {
-                    display_string.truncate(9);
-                    display_string.push_str("...");
-                }
+        if display_string.len() > 12 {
+            display_string.truncate(9);
+            display_string.push_str("...");
+        }
 
-                match directions_from_string(&string) {
-                    Ok(sequence) => {
-                        let result = if config.part == 1 { run_1(&sequence) } else { run_2(&sequence) };
-                        println!("Sequence '{:>12}' results in {} houses getting presents.", display_string, result);
-                    },
-                    Err(e) => eprintln!("Sequence '{:>12}': {}", display_string, e),
-                }
+        match directions_from_string(&string) {
+            Ok(sequence) => {
+                let result = if config.part == 1 { run_1(&sequence) } else { run_2(&sequence) };
+                println!("Sequence '{:>12}' results in {} houses getting presents.", display_string, result);
             },
-            Err(e) => eprintln!("{}", e),
+            Err(e) => eprintln!("Sequence '{:>12}': {}", display_string, e),
         }
     }
 }
