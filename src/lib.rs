@@ -6,7 +6,7 @@ use clap::{App, Arg, ArgMatches};
 
 pub struct Config {
     pub part: u8,
-    pub data: Vec<Result<String, &'static str>>
+    pub data: Vec<String>
 }
 
 
@@ -63,13 +63,15 @@ where
 }
 
 
-fn parse_matches(matches: &ArgMatches) -> Vec<Result<String, &'static str>> {
+fn parse_matches(matches: &ArgMatches) -> Vec<String> {
 
     let mut lines = Vec::new();
 
     // Grab raw lines
     if let Some(inputs) = matches.values_of("inputs") {
-        lines.extend(inputs.map(|s| Ok(s.to_owned())));
+        for input in inputs {
+            lines.push(input.to_owned());
+        }
     }
 
     // Open and read lines from files
@@ -80,7 +82,7 @@ fn parse_matches(matches: &ArgMatches) -> Vec<Result<String, &'static str>> {
             let handle = match File::open(file) {
                 Ok(fd) => fd,
                 Err(_) => {
-                    lines.push(Err("Error opening file."));
+                    eprintln!("Error opening file.");
                     continue;
                 }
             };
@@ -90,9 +92,9 @@ fn parse_matches(matches: &ArgMatches) -> Vec<Result<String, &'static str>> {
 
             for line in reader.lines() {
                 match line {
-                    Ok(string) => lines.push(Ok(string)),
+                    Ok(string) => lines.push(string),
                     Err(_) => {
-                        lines.push(Err("Error reading from file"));
+                        eprintln!("Error reading from file");
                         continue 'f;
                     }
                 }
