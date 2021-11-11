@@ -4,7 +4,30 @@ use std::io::{BufRead, BufReader};
 use clap::{App, Arg, ArgMatches};
 
 
-pub fn generate_app_template<'a, 'b>(name: &'a str, about: &'b str) -> App<'a, 'b>
+pub struct Config {
+    pub part: u8,
+    pub data: Vec<Result<String, &'static str>>
+}
+
+
+pub fn parse_cli<'a, 'b>(name: &'a str, about: &'b str) -> Config
+where
+    'a: 'static,
+    'b: 'static,
+{
+
+    let app = generate_clap_template(name, about);
+    let matches = app.get_matches();
+
+    // 'part' has a default value of "1" and can only be one of&["1", "2"], so we unwrap and parse it
+    let part = matches.value_of("part").unwrap().parse().unwrap();
+    let data = parse_matches(&matches);
+
+    Config { part, data }
+}
+
+
+fn generate_clap_template<'a, 'b>(name: &'a str, about: &'b str) -> App<'a, 'b>
 where
     'a: 'static,
     'b: 'static
@@ -12,6 +35,7 @@ where
 
     App::new(name)
         .about(about)
+        .author("Matthew Brown <matthew.e.brown.17@gmail.com>")
         .arg(
             Arg::with_name("part")
             .help("Which part of the AoC challenge to run")
@@ -39,7 +63,7 @@ where
 }
 
 
-pub fn parse_matches<T>(matches: &ArgMatches) -> Vec<Result<String, &'static str>> {
+fn parse_matches(matches: &ArgMatches) -> Vec<Result<String, &'static str>> {
 
     let mut lines = Vec::new();
 

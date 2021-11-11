@@ -16,7 +16,7 @@ pub fn directions_from_string(string: &str) -> Result<Vec<Direction>, &'static s
             '<' => Ok(Direction::Left),
             '>' => Ok(Direction::Right),
             'v' | 'V' => Ok(Direction::Down),
-            _ => Err("Malformed sequence."),
+            _ => Err("Encountered malformed sequence."),
         }
     }).collect()
 }
