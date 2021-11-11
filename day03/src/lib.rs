@@ -22,13 +22,11 @@ pub fn directions_from_string(string: &str) -> Result<Vec<Direction>, &'static s
 }
 
 
-pub fn run_1(sequence: &Vec<Direction>) -> i32 {
+pub fn run_1(sequence: &Vec<Direction>) -> usize {
     let mut current_pos = (0, 0);
 
     let mut visited = HashSet::new();
     visited.insert((0, 0));
-
-    let mut total_houses = 1;
 
     for direction in sequence {
         match direction {
@@ -40,23 +38,20 @@ pub fn run_1(sequence: &Vec<Direction>) -> i32 {
 
         if let None = visited.get(&current_pos) {
             visited.insert(current_pos.clone());
-            total_houses += 1;
         }
     }
 
-    total_houses
+    visited.len()
 }
 
 
-pub fn run_2(sequence: &Vec<Direction>) -> i32 {
+pub fn run_2(sequence: &Vec<Direction>) -> usize {
     let mut position_1 = (0, 0);
     let mut position_2 = (0, 0);
     let mut one_or_two = true;
 
     let mut visited = HashSet::new();
     visited.insert((0, 0));
-
-    let mut total_houses = 1;
 
     for direction in sequence {
         let current_pos = if one_or_two { &mut position_1 } else { &mut position_2 };
@@ -72,11 +67,10 @@ pub fn run_2(sequence: &Vec<Direction>) -> i32 {
 
         if let None = visited.get(current_pos) {
             visited.insert(current_pos.clone());
-            total_houses += 1;
         }
     }
 
-    total_houses
+    visited.len()
 }
 
 
