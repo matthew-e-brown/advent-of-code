@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 test-case = "1.2.1"
+utils = { path = "../utils" }
