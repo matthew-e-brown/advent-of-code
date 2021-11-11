@@ -17,13 +17,31 @@ pub fn directions_from_string(string: &str) -> Result<Vec<Direction>, &'static s
 
 pub fn run_1(sequence: &Vec<Direction>) -> isize {
     let mut floor = 0;
+
     for dir in sequence.iter() {
         match dir {
             Direction::Up => floor += 1,
             Direction::Down => floor -= 1,
         }
     }
+
     floor
+}
+
+
+pub fn run_2(sequence: &Vec<Direction>) -> usize {
+    let mut floor: isize = 0;
+
+    for (p, dir) in sequence.iter().enumerate() {
+        match dir {
+            Direction::Up => floor += 1,
+            Direction::Down => floor -= 1,
+        }
+
+        if floor < 0 { return p + 1; }
+    }
+
+    0
 }
 
 
@@ -44,6 +62,14 @@ mod tests {
     fn part_1(str_sequence: &str, result: isize) {
         let sequence = directions_from_string(str_sequence).unwrap();
         assert_eq!(run_1(&sequence), result);
+    }
+
+
+    #[test_case(")",      1 ; "case 1")]
+    #[test_case("()())",  5 ; "case 2")]
+    fn part_2(str_sequence: &str, result: usize) {
+        let sequence = directions_from_string(str_sequence).unwrap();
+        assert_eq!(run_2(&sequence), result);
     }
 
 }

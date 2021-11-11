@@ -1,5 +1,5 @@
-use utils::parse_cli;
-use day1::{directions_from_string, run_1};
+use utils::{parse_cli, Part};
+use day1::{directions_from_string, run_1, run_2};
 
 
 fn main() {
@@ -19,8 +19,16 @@ fn main() {
 
         match directions_from_string(&string) {
             Ok(sequence) => {
-                let result = run_1(&sequence);
-                println!("Sequence '{:>12}' puts Santa on floor {}", display_string, result);
+                match config.part {
+                    Part::One => {
+                        let result = run_1(&sequence);
+                        println!("Sequence '{:>12}' puts Santa on floor {}", display_string, result);
+                    }
+                    Part::Two => {
+                        let result = run_2(&sequence);
+                        println!("Sequence '{:>12}' puts Santa in the basement at position {}", display_string, result);
+                    }
+                }
             },
             Err(e) => eprint!("Sequence '{:>12}': {}", display_string, e),
         }

@@ -1,4 +1,4 @@
-use utils::parse_cli;
+use utils::{parse_cli, Part};
 use day3::{directions_from_string, run_1, run_2};
 
 
@@ -19,8 +19,14 @@ fn main() {
 
         match directions_from_string(&string) {
             Ok(sequence) => {
-                let result = if config.part == 1 { run_1(&sequence) } else { run_2(&sequence) };
+
+                let result = match config.part {
+                    Part::One => run_1(&sequence),
+                    Part::Two => run_2(&sequence),
+                };
+
                 println!("Sequence '{:>12}' results in {} houses getting presents.", display_string, result);
+
             },
             Err(e) => eprintln!("Sequence '{:>12}': {}", display_string, e),
         }
