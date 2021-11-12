@@ -15,7 +15,8 @@ fn main() {
                     println!("Those gifts add up to a total required {} sqft of wrapping paper.", result);
                 },
                 Part::Two => {
-                    eprintln!("Not implemented yet.");
+                    let result = run_2(&boxes);
+                    println!("Those gifts add up to a total required {} feet of ribbon.", result);
                 }
             }
         },

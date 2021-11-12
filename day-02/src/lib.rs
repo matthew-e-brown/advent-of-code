@@ -49,6 +49,24 @@ pub fn run_1(presents: &Vec<PresentBox>) -> usize {
 }
 
 
+pub fn run_2(presents: &Vec<PresentBox>) -> usize {
+
+    let mut running_total = 0;
+
+    for gift in presents {
+        let perimeter_1 = (gift.side_a + gift.side_b) * 2;
+        let perimeter_2 = (gift.side_b + gift.side_c) * 2;
+        let perimeter_3 = (gift.side_a + gift.side_c) * 2;
+
+        let ribbon = gift.side_a * gift.side_b * gift.side_c;
+
+        running_total += ribbon + min(perimeter_1, min(perimeter_2, perimeter_3));
+    }
+
+    running_total
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -56,12 +74,25 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
+    fn slice_to_owned(slices: Vec<&str>) -> Vec<String> {
+        slices.iter().map(|s| (*s).to_owned()).collect()
+    }
+
     #[test_case(vec![ "2x3x4" ],   58; "case 1")]
     #[test_case(vec![ "1x1x10" ],  43; "case 2")]
     fn part_1(boxes: Vec<&str>, result: usize) {
-        let boxes = boxes.into_iter().map(|s| (*s).to_owned()).collect();
+        let boxes = slice_to_owned(boxes);
         let boxes = boxes_from_strings(&boxes).unwrap();
         assert_eq!(run_1(&boxes), result);
+    }
+
+
+    #[test_case(vec![ "2x3x4" ],   34; "case 1")]
+    #[test_case(vec![ "1x1x10" ],  14; "case 2")]
+    fn part_2(boxes: Vec<&str>, result: usize) {
+        let boxes = slice_to_owned(boxes);
+        let boxes = boxes_from_strings(&boxes).unwrap();
+        assert_eq!(run_2(&boxes), result);
     }
 
 }
