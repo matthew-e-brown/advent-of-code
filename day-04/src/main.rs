@@ -1,4 +1,4 @@
-use utils::{parse_cli, Part};
+use utils::{truncate, cli::{parse_cli, Part}};
 
 use day4::run;
 
@@ -15,14 +15,9 @@ fn main() {
     };
 
     for string in config.data {
-        let mut display_string = string.clone();
-
-        if display_string.len() > 12 {
-            display_string.truncate(9);
-            display_string.push_str("...");
-        }
+        let display = truncate(&string, 12);
 
         let result = run(&string, threshold);
-        println!("Input '{:>12}' has solution {} ({} zeroes)", display_string, result, threshold);
+        println!("Input '{:>12}' has solution {} ({} zeroes)", display, result, threshold);
     }
 }

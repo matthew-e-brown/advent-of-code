@@ -1,4 +1,4 @@
-use utils::{parse_cli, Part};
+use utils::{truncate, cli::{parse_cli, Part}};
 use day1::{directions_from_string, run_1, run_2};
 
 
@@ -10,27 +10,22 @@ fn main() {
     );
 
     for string in config.data {
-        let mut display_string = string.clone();
-
-        if display_string.len() > 12 {
-            display_string.truncate(9);
-            display_string.push_str("...");
-        }
+        let display = truncate(&string, 12);
 
         match directions_from_string(&string) {
             Ok(sequence) => {
                 match config.part {
                     Part::One => {
                         let result = run_1(&sequence);
-                        println!("Sequence '{:>12}' puts Santa on floor {}", display_string, result);
+                        println!("Sequence '{:>12}' puts Santa on floor {}", display, result);
                     }
                     Part::Two => {
                         let result = run_2(&sequence);
-                        println!("Sequence '{:>12}' puts Santa in the basement at position {}", display_string, result);
+                        println!("Sequence '{:>12}' puts Santa in the basement at position {}", display, result);
                     }
                 }
             },
-            Err(e) => eprint!("Sequence '{:>12}': {}", display_string, e),
+            Err(e) => eprint!("Sequence '{:>12}': {}", display, e),
         }
     }
 }

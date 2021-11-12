@@ -1,4 +1,4 @@
-use utils::{parse_cli, Part};
+use utils::cli::{parse_cli, Part};
 use day2::*;
 
 fn main() {
