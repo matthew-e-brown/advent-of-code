@@ -1,6 +1,9 @@
-use utils::cli::parse_cli;
+use utils::cli::{parse_cli, Part};
 
-use day5::part1;
+use day5::{
+    part1::run as run_1,
+    part2::run as run_2,
+};
 
 
 fn main() {
@@ -10,7 +13,10 @@ fn main() {
         "Advent of Code 2015, day 5"
     );
 
-    let result = part1::run(&config.data);
+    let result = match config.part {
+        Part::One => run_1(&config.data),
+        Part::Two => run_2(&config.data),
+    };
 
     println!(
         "Of those strings, {} of them are nice; {} are naughty.",

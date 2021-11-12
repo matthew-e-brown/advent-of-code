@@ -78,7 +78,7 @@ mod tests {
     #[test_case("jchzalrnumimnmhp", false; "case 3")]
     #[test_case("haegwjzuvuyypxyu", false; "case 4")]
     #[test_case("dvszwmarrgswjxmb", false; "case 5")]
-    fn part_1(input: &str, expected: bool) {
+    fn full_suite(input: &str, expected: bool) {
         assert_eq!(is_nice(input), expected);
     }
 
