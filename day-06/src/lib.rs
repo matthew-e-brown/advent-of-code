@@ -1,13 +1,12 @@
 use regex::Regex;
 
-#[derive(Debug)]
+#[derive(Clone, Copy)]
 pub enum Action {
     Toggle,
     TurnOn,
     TurnOff,
 }
 
-#[derive(Debug)]
 pub struct Instruction {
     pub action: Action,
     pub start: (usize, usize),
@@ -62,37 +61,48 @@ pub fn instructions_from_strings(strings: &Vec<String>) -> Result<Vec<Instructio
 }
 
 
-pub fn run_1(instructions: &Vec<Instruction>) -> usize {
-    // The lights all start off
-    let mut lights = [[false; 1000]; 1000];
+fn execute<T: Copy>(
+    instructions: &Vec<Instruction>,
+    default: T,
+    get_action: fn(Action) -> fn(&mut T) -> (),
+) -> Vec<Vec<T>> {
 
-    for inst in instructions {
+    // To avoid a stack overflow, we need to allocate this data on the heap. To do so, we are forced to use a Vec
+    // instead of an array. This works fine with 1000x1000 booleans, but any more complex type, like u32, causes an
+    // overflow.
+    let mut lights = vec![vec![default; 1000]; 1000];
 
-        let Instruction { start, end, action } = inst;
+    for instruction in instructions {
 
-        // Do the check just this once and construct a closure, so that we don't have to potentially match 1000x1000
-        // times.
+        let Instruction { start, end, action } = instruction;
 
-        let action = match action {
-            Action::TurnOff =>  |light: &mut bool| *light = false,
-            Action::Toggle =>   |light: &mut bool| *light = !(*light),
-            Action::TurnOn =>   |light: &mut bool| *light = true,
-        };
-
-        // Need to construct our slice with these if-elses because the rust (N..M) syntax breaks if N > M. Heaven forbid
-        // anybody ever need to loop through something backwards.
-
+        let action = get_action(*action);
         let x_range = if start.0 <= end.0 { start.0..=end.0 } else { end.0..=start.0 };
         let y_range = if start.1 <= end.1 { start.1..=end.1 } else { end.1..=start.1 };
 
-        // Will have to test and see if this is actually faster than using x,y counters in a while loop...
-
         let lights = lights[x_range]
             .iter_mut()
-            .flat_map(|sub| &mut sub[y_range.clone()]);
+            .flat_map(|sub_array| &mut sub_array[y_range.clone()]);
 
         for light in lights { action(light); }
     }
+
+    lights
+}
+
+
+pub fn run_1(instructions: &Vec<Instruction>) -> usize {
+    let lights = execute(
+        instructions,
+        false,
+        |action| {
+            match action {
+                Action::Toggle =>   |light| *light = !(*light),
+                Action::TurnOn =>   |light| *light = true,
+                Action::TurnOff =>  |light| *light = false,
+            }
+        }
+    );
 
     lights
         .iter()
@@ -102,10 +112,63 @@ pub fn run_1(instructions: &Vec<Instruction>) -> usize {
 }
 
 
+pub fn run_2(instructions: &Vec<Instruction>) -> u32 {
+    let lights = execute(
+        instructions,
+        0,
+        |action| {
+            match action {
+                Action::Toggle =>  |light| *light += 2,
+                Action::TurnOn =>  |light| *light += 1,
+                Action::TurnOff => |light| *light = if *light > 0 { *light - 1 } else { 0 },
+            }
+        }
+    );
+
+    lights
+        .iter()
+        .flatten()
+        .sum()
+}
+
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
+
+    mod algorithm {
+        use super::*;
+
+        #[test]
+        fn example_1() {
+            let instructions = vec![
+                Instruction { action: Action::TurnOn, start: (0, 0), end: (999, 999), },
+                Instruction { action: Action::Toggle, start: (0, 0), end: (999, 0), },
+                Instruction { action: Action::TurnOff, start: (10, 10), end: (10, 10), },
+            ];
+
+            assert_eq!(
+                run_1(&instructions),
+                (1000 * 1000) - (1000 * 1) - (1 * 1)
+            );
+        }
+
+        #[test]
+        fn example_2() {
+            let instructions = vec![
+                Instruction { action: Action::TurnOn, start: (0, 0), end: (0, 0), },
+                Instruction { action: Action::Toggle, start: (0, 0), end: (999, 999), },
+            ];
+
+            assert_eq!(
+                run_2(&instructions),
+                (1) + (1000 * 1000 * 2)
+            );
+        }
+
+    }
+
 
     mod parsing {
         use super::*;
@@ -139,25 +202,6 @@ mod tests {
             ]);
 
             assert!(result.is_ok());
-        }
-
-    }
-
-    mod algorithm {
-        use super::*;
-
-        #[test]
-        fn example() {
-            let instructions = vec![
-                Instruction { action: Action::TurnOn, start: (0, 0), end: (999, 999), },
-                Instruction { action: Action::Toggle, start: (0, 0), end: (999, 0), },
-                Instruction { action: Action::TurnOff, start: (10, 10), end: (10, 10), },
-            ];
-
-            assert_eq!(
-                run_1(&instructions),
-                (1000 * 1000) - (1000 * 1) - (1 * 1)
-            );
         }
 
     }
