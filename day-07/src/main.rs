@@ -1,5 +1,5 @@
-use utils::cli::parse_cli;
-use day7::run_1;
+use utils::cli::{Part, parse_cli};
+use day7::{run_1, run_2};
 
 
 fn main() {
@@ -9,7 +9,14 @@ fn main() {
         "Advent of Code 2015, day 7"
     );
 
-    match run_1(&config.data) {
+
+    let result = match config.part {
+        Part::One => run_1(&config.data),
+        Part::Two => run_2(&config.data),
+    };
+
+
+    match result {
         Ok(n) => {
             println!("That configuration results in 'a' having the value {}.", n);
         },

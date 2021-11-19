@@ -9,6 +9,24 @@ pub fn run_1(board: &Vec<String>) -> Result<u16, String> {
 }
 
 
+pub fn run_2(board: &Vec<String>) -> Result<u16, String> {
+    let mut board = CircuitBoard::new(board)?;
+
+    // Get the value of 'a'
+    let new_b = board.get("a")?;
+
+    // Remove existing 'b' from the board
+    board.remove_wire("b")?;
+
+    // Re-add 'b' to the board
+    let new_b = format!("{} -> b", new_b);
+    board.add_wire(&new_b)?;
+
+    // Fetch new 'a'
+    board.get("a")
+}
+
+
 #[cfg(test)]
 mod tests {
 
