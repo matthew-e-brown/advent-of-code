@@ -1,24 +1,33 @@
-use std::{rc::Rc, borrow::Borrow, hash::{Hash, Hasher}};
-use std::collections::HashSet;
+// https://opendatastructures.org/ods-python/12_Graphs.html
+// https://en.wikipedia.org/wiki/Edmonds%27_algorithm
+// https://stackoverflow.com/a/57931787/10549827
+
+
+use std::{borrow::Borrow, fmt::Display, hash::{Hash, Hasher}, rc::Rc};
+use std::collections::{HashMap, HashSet};
 use lazy_static::lazy_static;
 use regex::Regex;
 
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct GraphNode<'a> {
     alias: &'a str,
 }
 
 
-// https://stackoverflow.com/a/57931787/10549827
-
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct RcNode<'a>(Rc<GraphNode<'a>>);
 
 impl<'a> RcNode<'a> {
     fn new(alias: &'a str) -> Self {
         // create a new RcNode by making a new Rc and returning Self { 0: } as a wrapper
         Self { 0: Rc::new(GraphNode { alias }) }
+    }
+}
+
+impl<'a> Display for RcNode<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.alias)
     }
 }
 
@@ -43,17 +52,24 @@ impl<'a> Borrow<Rc<GraphNode<'a>>> for RcNode<'a> {
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, PartialOrd)]
 struct GraphEdge<'a> {
-    source: RcNode<'a>,
-    target: RcNode<'a>,
+    node_a: RcNode<'a>,
+    node_b: RcNode<'a>,
     cost: usize
 }
 
 impl<'a> Hash for GraphEdge<'a> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.source.hash(state);
-        self.target.hash(state);
+        self.node_a.hash(state);
+        self.node_b.hash(state);
+    }
+}
+
+impl<'a> Ord for GraphEdge<'a> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Sort a graph edge based on their costs/weights
+        self.cost.cmp(&other.cost)
     }
 }
 
@@ -84,7 +100,7 @@ impl<'a> Graph<'a> {
             let cost = caps.get(3).unwrap().as_str().parse().unwrap();
 
             // Check if the source node already exists
-            let source = if let Some(rc) = nodes.get(&source) {
+            let node_a = if let Some(rc) = nodes.get(&source) {
                 // Get the reference to the existing node
                 rc.clone()
             } else {
@@ -96,7 +112,7 @@ impl<'a> Graph<'a> {
             };
 
             // Do the same for the target
-            let target = if let Some(rc) = nodes.get(&target) {
+            let node_b = if let Some(rc) = nodes.get(&target) {
                 rc.clone()
             } else {
                 let new_rc = RcNode::new(target);
@@ -104,9 +120,13 @@ impl<'a> Graph<'a> {
                 new_rc
             };
 
-            let new_edge = GraphEdge { source, target, cost };
+            // Sort them so our Hash will match duplicates for undirected graph (L->R == R->L)
+            let mut sort_me = vec![node_a, node_b];
+            sort_me.sort();
+
+            let new_edge = GraphEdge { node_a: sort_me[0].clone(), node_b: sort_me[1].clone(), cost };
             if edges.contains(&new_edge) {
-                return Err(format!("Duplicate line: `{}`", string));
+                return Err(format!("Duplicate pair: `{}` <-> `{}`", sort_me[0], sort_me[1]));
             } else {
                 edges.insert(new_edge);
             }
@@ -114,6 +134,46 @@ impl<'a> Graph<'a> {
 
         Ok(Graph { nodes, edges })
     }
+
+
+    /*
+    fn detect_cycle(edges: &Vec<&GraphEdge>, new_edge: &GraphEdge) -> bool {
+
+        let mut visited = HashMap::new();
+        for edge in edges.iter() { visited.insert(*edge, false); }
+        visited.insert(new_edge, false);
+
+    }
+
+
+    pub fn mst(&self) -> HashSet<&GraphEdge> {
+
+        // Sort all edges in ascending order by their weight
+        let sorted = {
+            let mut vec: Vec<&GraphEdge> = self.edges.iter().collect();
+            vec.sort();
+            vec
+        };
+
+        let sorted = sorted.iter();
+
+        // Construct a spanning tree out of all nodes that don't create a cycle
+        let mut spanning = Vec::new();
+
+        while spanning.len() < self.nodes.len() - 1 {
+
+            // Can unwrap because recursive algorithm is guaranteed
+            let edge = *sorted.next().unwrap();
+
+            if !Self::detect_cycle(&spanning, edge) {
+                spanning.push(edge);
+            }
+
+        }
+
+        HashSet::from_iter(spanning)
+    }
+    */
 
 }
 
