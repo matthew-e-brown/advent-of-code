@@ -29,7 +29,7 @@ fn look_and_say(string: &String) -> Result<String, &'static str> {
 }
 
 
-pub fn run_1(string: &String, iterations: usize) -> Result<String, &'static str> {
+pub fn run(string: &String, iterations: usize) -> Result<String, &'static str> {
     let mut i = 0;
     let mut string = string.clone();
     loop {
@@ -52,9 +52,9 @@ mod tests {
     use test_case::test_case;
 
     #[test]
-    fn example_1() {
+    fn example() {
         let example = "1".to_owned();
-        assert_eq!(run_1(&example, 5).unwrap(), "312211")
+        assert_eq!(run(&example, 5).unwrap(), "312211")
     }
 
 
@@ -70,7 +70,7 @@ mod tests {
     #[test_case("5540042", 4, "3112311513211431123110132114132112"; "case 2")]
     fn iterative_test(input: &str, num: usize, expected: &str) {
         let example = input.to_owned();
-        assert_eq!(run_1(&example, num).unwrap(), expected);
+        assert_eq!(run(&example, num).unwrap(), expected);
     }
 
     // 123

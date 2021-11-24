@@ -1,5 +1,5 @@
 use utils::{cli::{parse_cli, Part}, truncate};
-use day10::run_1;
+use day10::run;
 
 fn main() {
 
@@ -12,7 +12,7 @@ fn main() {
     for string in config.data {
         let display = truncate(&string, 12);
 
-        let result = run_1(&string, match config.part {
+        let result = run(&string, match config.part {
             Part::One => 40, // part one, 40 times
             Part::Two => 50, // part two, 50 times
         });
