@@ -1,5 +1,5 @@
-use day12::run;
-use utils::cli::parse_cli;
+use utils::cli::{parse_cli, Part};
+use day12::{run_1, run_2};
 
 
 fn main() {
@@ -14,8 +14,17 @@ fn main() {
     // Will need to update utils to handle getting the whole file as one string.
 
     for line in config.data {
-        match run(&line) {
-            Ok(sum) => println!("The sum of all the numbers in that JSON is {}.", sum),
+
+        let (result, message) = match config.part {
+            Part::One => (run_1(&line) , "The sum of all numbers in that JSON is "),
+            Part::Two => (run_2(&line) , "The sum of all numbers in that JSON, excluding \"red\" objects, is "),
+        };
+
+        match result {
+            Ok(sum) => {
+                print!("{}", message);
+                println!("{}", sum);
+            },
             Err(e) => eprintln!("JSON error: {}", e)
         }
     }
