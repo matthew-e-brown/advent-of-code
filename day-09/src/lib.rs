@@ -12,10 +12,16 @@ struct Route<'a> {
 }
 
 
+enum Target {
+    Min,
+    Max,
+}
+
+
 fn parse_data(data: &Vec<String>) -> Result<(HashMap<Route, usize>, HashSet<&str>), String> {
 
     lazy_static! {
-        static ref RE: Regex = Regex::new(r"^(\w+)\s+to\s+(\w+)\s+=\s+([\d\.]+)$").unwrap();
+        static ref RE: Regex = Regex::new(r"^(\w+)\s+to\s+(\w+)\s+=\s+([\d]+)$").unwrap();
     }
 
     let mut routes = HashMap::new();
@@ -43,13 +49,16 @@ fn parse_data(data: &Vec<String>) -> Result<(HashMap<Route, usize>, HashSet<&str
 }
 
 
-pub fn run_1(data: &Vec<String>) -> Result<(usize, String), String> {
+fn find(min_or_max: Target, routes: HashMap<Route, usize>, cities: HashSet<&str>) -> (usize, String) {
 
-    let (routes, cities) = parse_data(data)?;
     let permutations = cities.iter().permutations(cities.len());
 
-    let mut min_dist = std::usize::MAX;
-    let mut min_path = String::new();
+    // Depending on the goal, we need to start our search thingy at a different value
+    let mut target_path = String::new();
+    let mut target_dist = match min_or_max {
+        Target::Min => std::usize::MAX,
+        Target::Max => 0,
+    };
 
     'o: for path in permutations {
 
@@ -77,7 +86,7 @@ pub fn run_1(data: &Vec<String>) -> Result<(usize, String), String> {
             };
 
             if let Some(d) = walk_dist {
-                min_path = path.iter().join(" -> ");
+                target_path = path.iter().join(" -> ");
                 dist += d;
             } else {
                 // This permutation of walks (this "path") does not have a way to go all the way from A->Z, so we ignore
@@ -89,10 +98,26 @@ pub fn run_1(data: &Vec<String>) -> Result<(usize, String), String> {
         #[cfg(test)]
         println!("{}", dist);
 
-        if dist < min_dist { min_dist = dist; }
+        match min_or_max {
+            Target::Min => if dist < target_dist { target_dist = dist; }
+            Target::Max => if dist > target_dist { target_dist = dist; }
+        };
     }
 
-    Ok((min_dist, min_path))
+
+    (target_dist, target_path)
+}
+
+
+pub fn run_1(data: &Vec<String>) -> Result<(usize, String), String> {
+    let (routes, cities) = parse_data(data)?;
+    Ok(find(Target::Min, routes, cities))
+}
+
+
+pub fn run_2(data: &Vec<String>) -> Result<(usize, String), String> {
+    let (routes, cities) = parse_data(data)?;
+    Ok(find(Target::Max, routes, cities))
 }
 
 
@@ -137,9 +162,16 @@ mod tests {
 
 
     #[test]
-    fn example() {
+    fn example_1() {
         let data = example_data();
         assert_eq!(run_1(&data).unwrap().0, 605);
+    }
+
+
+    #[test]
+    fn example_2() {
+        let data = example_data();
+        assert_eq!(run_2(&data).unwrap().0, 982);
     }
 
 }
