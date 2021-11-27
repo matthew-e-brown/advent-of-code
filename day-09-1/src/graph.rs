@@ -59,6 +59,10 @@ type Parents<T> = HashMap<Rc<T>, Option<Rc<T>>>;
 
 impl<T> Graph<T> where T: Eq + Hash + Clone {
 
+    pub fn new_empty() -> Self {
+        Self { nodes: HashSet::new(), edges: vec![] }
+    }
+
 
     pub fn add_edge(&mut self, a: T, b: T, cost: usize) {
 
@@ -77,6 +81,7 @@ impl<T> Graph<T> where T: Eq + Hash + Clone {
         let b = insert_or_get(b);
 
         self.edges.push(Edge { a, b, cost });
+        self.edges.sort_unstable_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
     }
 
 
@@ -90,13 +95,10 @@ impl<T> Graph<T> where T: Eq + Hash + Clone {
     }
 
 
-    pub fn find_mst_length(&mut self) -> usize {
+    pub fn find_mst_length(&self) -> usize {
 
         let mut total = 0;
         let mut count = 0;
-
-        // Start by sorting the edges of this graph
-        self.edges.sort_unstable_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
 
         let mut parents: Parents<T> = {
             let mut map = HashMap::new();
@@ -104,9 +106,11 @@ impl<T> Graph<T> where T: Eq + Hash + Clone {
             map
         };
 
+        // We don't need to sort because the add_edges function keeps them sorted
+
         let mut iter = self.edges.iter();
 
-        while count < self.edges.len() {
+        while count < self.nodes.len() {
             let Edge { a, b, cost } = iter.next().unwrap();
             let parent_a = Self::find_absolute_parent(&parents, a.clone());
             let parent_b = Self::find_absolute_parent(&parents, b.clone());
@@ -125,6 +129,36 @@ impl<T> Graph<T> where T: Eq + Hash + Clone {
         }
 
         total
+    }
+
+}
+
+
+use lazy_static::lazy_static;
+use regex::Regex;
+
+impl Graph<String> {
+
+    pub fn new_from_paths(paths: &Vec<String>) -> Result<Self, String> {
+
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"^(\w+)\s+to\s+(\w+)\s+=\s+([\d\.]+)$").unwrap();
+        }
+
+        let mut graph = Self::new_empty();
+
+        for path in paths.iter() {
+            let caps = RE.captures(path).ok_or(format!("Malformed line: `{}`", path))?;
+
+            // Because our Regex is strict enough, we can unwrap all the groups
+            let a = caps.get(1).unwrap().as_str().to_owned();
+            let b = caps.get(2).unwrap().as_str().to_owned();
+            let cost = caps.get(3).unwrap().as_str().parse().unwrap();
+
+            graph.add_edge(a, b, cost);
+        }
+
+        Ok(graph)
     }
 
 }
