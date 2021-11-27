@@ -11,8 +11,8 @@ fn main() {
     let result = run_1(&config.data);
 
     match result {
-        Ok(n) => println!("With those distances, the shorted path is {}.", n),
-        Err(e) => eprintln!("Error occurred: {}", e),
+        Ok((v, p)) => println!("The shortest path covering all cities is:\n\t{} = {}", p, v),
+        Err(e) => eprint!("Error: {}", e),
     }
 
 }

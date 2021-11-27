@@ -8,5 +8,6 @@ edition = "2021"
 
 [dependencies]
 utils = { path = "../utils" }
+itertools = "0.10.1"
 lazy_static = "1.4.0"
 regex = "1.5.4"
