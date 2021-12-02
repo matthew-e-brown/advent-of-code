@@ -34,7 +34,7 @@ function part2(data) {
 }
 
 
-const input = readFileSync('./puzzle-input.txt')
+const input = readFileSync(process.argv[2])
   .toString()
   .split('\n')
   .map(Number);
