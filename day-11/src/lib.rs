@@ -4,15 +4,14 @@ fn increment(password: &str) -> Result<String, &'static str> {
     let mut i = password.len() - 1;
 
     loop {
-
-        if i == 0 {
-            return Err("Password increment overflow ('zzzz' cannot be incremented)");
-        }
-
         let c = &mut password[i];
         if *c == 'z' {
             *c = 'a';
-            i -= 1;
+            if i == 0 {
+                return Err("Password increment overflow ('zzzz' cannot be incremented)");
+            } else {
+                i -= 1;
+            }
         } else {
             *c = char::from_u32(*c as u32 + 1).unwrap();
             break;
@@ -124,8 +123,8 @@ mod tests {
     use test_case::test_case;
 
 
-    #[test_case( "a",        "b"; "case 1")]
-    #[test_case("dz",       "ea"; "case 2")]
+    #[test_case(    "a",     "b"; "case 1")]
+    #[test_case(   "dz",    "ea"; "case 2")]
     #[test_case("mzzzz", "naaaa"; "case 3")]
     fn test_increment(start: &str, expected: &str) {
         assert_eq!(increment(start).unwrap(), expected);
