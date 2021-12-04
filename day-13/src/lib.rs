@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::{ops::{Deref, DerefMut}, fmt};
 use regex::Regex;
+use itertools::Itertools;
 
 // neighbour -> happiness change
 type Opinions<'a> = HashMap<&'a str, isize>;
@@ -47,13 +48,29 @@ impl<'a> fmt::Debug for TableGuests<'a> {
 }
 
 
-pub fn create_table(lines: &Vec<String>) -> Result<TableGuests, String> {
+fn validate_opinions(table: &TableGuests) -> bool {
+    // For every guest, check that they have an entry for every other guest
+    for (guest, opinions) in table.iter() {
+        for neighbour in table.keys() {
+            if guest == neighbour { continue; }
+            if !opinions.contains_key(neighbour) { return false; }
+        }
+    }
 
+    true
+}
+
+
+pub fn create_table(data: &Vec<String>) -> Result<TableGuests, String> {
+
+    if data.len() < 2 {
+        return Err("There must be at least two guests at the table.".to_owned());
+    }
+    
     let re = Regex::new(r"^(\w+).+(gain|lose) (\d+).+next to (\w+)\.?$").unwrap();
-
     let mut guests: GuestsInner = HashMap::new();
 
-    for line in lines.iter() {
+    for line in data.iter() {
         let caps = re.captures(line).ok_or(format!("Malformed line: {}", line))?;
 
         // Because regex uses anchors, we know we will always have the groups we want if we get this far
@@ -82,7 +99,40 @@ pub fn create_table(lines: &Vec<String>) -> Result<TableGuests, String> {
         }
     }
 
-    Ok(TableGuests{ 0: guests })
+    let result = TableGuests { 0: guests };
+
+    if !validate_opinions(&result) {
+        Err("Table is not valid: all guests must have an opinion of all other guests.".to_owned())
+    } else {
+        Ok(result)
+    }
+}
+
+
+pub fn run_1<'a>(table: &'a TableGuests) -> (isize, Vec<&'a str>) {
+    let mut highest_net = 0;
+    let mut highest_vec = None;
+    let guest_orders = table.keys().permutations(table.len());
+
+    for permutation in guest_orders {
+        let mut net = 0;
+
+        for (&left, &guest, &right) in permutation.iter().circular_tuple_windows() {
+            let opinions = table.get(guest).unwrap();
+            net += opinions.get(left).unwrap();
+            net += opinions.get(right).unwrap();
+        }
+
+        #[cfg(test)]
+        println!("Permutation:\t{:?}\nNet change:\t{}\n", permutation, net);
+
+        if net > highest_net {
+            highest_net = net;
+            highest_vec = Some(permutation.iter().map(|r| **r).collect());
+        }
+    }
+
+    (highest_net, highest_vec.unwrap())
 }
 
 
@@ -114,7 +164,15 @@ mod tests {
     fn parse() {
         let data = example_data();
         let table = create_table(&data).unwrap();
-        println!("{:#?}", table);
+        println!("{:?}", table);
+    }
+
+
+    #[test]
+    fn example() {
+        let data = example_data();
+        let table = create_table(&data).unwrap();
+        assert_eq!(run_1(&table).0, 330);
     }
 
 }
