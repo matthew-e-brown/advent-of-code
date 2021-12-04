@@ -1,6 +1,6 @@
 use utils::cli::{parse_cli, Part};
 
-use day5::{run_1, run_2};
+use day5r::{run_1, run_2};
 
 
 fn main() {
