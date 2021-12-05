@@ -8,6 +8,8 @@ type Opinions<'a> = HashMap<&'a str, isize>;
 // name -> (neighbour -> happiness change) map
 type GuestsInner<'a> = HashMap<&'a str, Opinions<'a>>;
 
+
+#[derive(Clone)]
 pub struct TableGuests<'a>(GuestsInner<'a>);
 
 impl<'a> Deref for TableGuests<'a> {
@@ -68,7 +70,7 @@ pub fn create_table(data: &Vec<String>) -> Result<TableGuests, String> {
     }
     
     let re = Regex::new(r"^(\w+).+(gain|lose) (\d+).+next to (\w+)\.?$").unwrap();
-    let mut guests: GuestsInner = HashMap::new();
+    let mut guests = GuestsInner::new();
 
     for line in data.iter() {
         let caps = re.captures(line).ok_or(format!("Malformed line: {}", line))?;
@@ -109,7 +111,7 @@ pub fn create_table(data: &Vec<String>) -> Result<TableGuests, String> {
 }
 
 
-pub fn run_1<'a>(table: &'a TableGuests) -> (isize, Vec<&'a str>) {
+pub fn run_1<'a, 'b>(table: &'a TableGuests<'b>) -> (isize, Vec<&'b str>) {
     let mut highest_net = 0;
     let mut highest_vec = None;
     let guest_orders = table.keys().permutations(table.len());
@@ -133,6 +135,23 @@ pub fn run_1<'a>(table: &'a TableGuests) -> (isize, Vec<&'a str>) {
     }
 
     (highest_net, highest_vec.unwrap())
+}
+
+
+pub fn run_2<'a, 'b>(table: &'a TableGuests<'b>) -> (isize, Vec<&'b str>) {
+
+    // Insert myself at the table. To do so, create a new table that we can modify
+    let mut table = table.clone();
+    let mut my_opinions = Opinions::new();
+
+    for (guest, their_opinions) in table.iter_mut() {
+        my_opinions.insert(*guest, 0);
+        their_opinions.insert("[Me]", 0);
+    }
+
+    table.insert("[Me]", my_opinions);
+
+    run_1(&table)
 }
 
 
