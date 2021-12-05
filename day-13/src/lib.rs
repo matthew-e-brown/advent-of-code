@@ -49,69 +49,71 @@ impl<'a> fmt::Debug for TableGuests<'a> {
     }
 }
 
+impl<'a> TableGuests<'a> {
 
-fn validate_opinions(table: &TableGuests) -> bool {
-    // For every guest, check that they have an entry for every other guest
-    for (guest, opinions) in table.iter() {
-        for neighbour in table.keys() {
-            if guest == neighbour { continue; }
-            if !opinions.contains_key(neighbour) { return false; }
+    pub fn new(data: &'a Vec<String>) -> Result<Self, String> {
+
+        if data.len() < 2 {
+            return Err("There must be at least two guests at the table.".to_owned());
         }
-    }
 
-    true
-}
+        let re = Regex::new(r"^(\w+).+(gain|lose) (\d+).+next to (\w+)\.?$").unwrap();
+        let mut guests = GuestsInner::new();
 
+        for line in data.iter() {
+            let caps = re.captures(line).ok_or(format!("Malformed line: {}", line))?;
 
-pub fn create_table(data: &Vec<String>) -> Result<TableGuests, String> {
+            // Because regex uses anchors, we know we will always have the groups we want if we get this far
 
-    if data.len() < 2 {
-        return Err("There must be at least two guests at the table.".to_owned());
-    }
-    
-    let re = Regex::new(r"^(\w+).+(gain|lose) (\d+).+next to (\w+)\.?$").unwrap();
-    let mut guests = GuestsInner::new();
+            let name = caps.get(1).unwrap().as_str();
+            let neighbour = caps.get(4).unwrap().as_str();
+            let amount = {
+                // check 'gain' or 'lose'
+                let multiplier = if caps.get(2).unwrap().as_str() == "gain" { 1 } else { -1 };
+                caps.get(3).unwrap().as_str().parse::<isize>().unwrap() * multiplier
+            };
 
-    for line in data.iter() {
-        let caps = re.captures(line).ok_or(format!("Malformed line: {}", line))?;
-
-        // Because regex uses anchors, we know we will always have the groups we want if we get this far
-
-        let name = caps.get(1).unwrap().as_str();
-        let neighbour = caps.get(4).unwrap().as_str();
-        let amount = {
-            // check 'gain' or 'lose'
-            let multiplier = if caps.get(2).unwrap().as_str() == "gain" { 1 } else { -1 };
-            caps.get(3).unwrap().as_str().parse::<isize>().unwrap() * multiplier
-        };
-
-        if let Some(current_opinions) = guests.get_mut(name) {
-            // If this guest already has a map being built up of their neighbours...
-            // Insert the new neighbour, and fail on duplicates
-            if let Some(old) = current_opinions.insert(neighbour, amount) {
-                return Err(format!(
-                    "Duplicate neighbour for '{}': neighbour '{}' as both {} and {}.",
-                    name, neighbour, old, amount
-                ));
+            if let Some(current_opinions) = guests.get_mut(name) {
+                // If this guest already has a map being built up of their neighbours...
+                // Insert the new neighbour, and fail on duplicates
+                if let Some(old) = current_opinions.insert(neighbour, amount) {
+                    return Err(format!(
+                        "Duplicate neighbour for '{}': neighbour '{}' as both {} and {}.",
+                        name, neighbour, old, amount
+                    ));
+                }
+            } else {
+                let mut new_opinions = HashMap::new();
+                new_opinions.insert(neighbour, amount);
+                guests.insert(name, new_opinions);
             }
+        }
+
+        let result = Self { 0: guests };
+
+        if !result.validate_opinions() {
+            Err("Table is not valid: all guests must have an opinion of all other guests.".to_owned())
         } else {
-            let mut new_opinions = HashMap::new();
-            new_opinions.insert(neighbour, amount);
-            guests.insert(name, new_opinions);
+            Ok(result)
         }
     }
 
-    let result = TableGuests { 0: guests };
+    fn validate_opinions(&self) -> bool {
+        // For every guest, check that they have an entry for every other guest
+        for (guest, opinions) in self.iter() {
+            for neighbour in self.keys() {
+                if guest == neighbour { continue; }
+                if !opinions.contains_key(neighbour) { return false; }
+            }
+        }
 
-    if !validate_opinions(&result) {
-        Err("Table is not valid: all guests must have an opinion of all other guests.".to_owned())
-    } else {
-        Ok(result)
+        true
     }
+
 }
 
 
-pub fn run_1<'a, 'b>(table: &'a TableGuests<'b>) -> (isize, Vec<&'b str>) {
+pub fn run_1<'a>(table: &TableGuests<'a>) -> (isize, Vec<&'a str>) {
     let mut highest_net = 0;
     let mut highest_vec = None;
     let guest_orders = table.keys().permutations(table.len());
@@ -138,7 +140,7 @@ pub fn run_1<'a, 'b>(table: &'a TableGuests<'b>) -> (isize, Vec<&'b str>) {
 }
 
 
-pub fn run_2<'a, 'b>(table: &'a TableGuests<'b>) -> (isize, Vec<&'b str>) {
+pub fn run_2<'a>(table: &TableGuests<'a>) -> (isize, Vec<&'a str>) {
 
     // Insert myself at the table. To do so, create a new table that we can modify
     let mut table = table.clone();
@@ -182,7 +184,7 @@ mod tests {
     #[test]
     fn parse() {
         let data = example_data();
-        let table = create_table(&data).unwrap();
+        let table = TableGuests::new(&data).unwrap();
         println!("{:?}", table);
     }
 
@@ -190,7 +192,7 @@ mod tests {
     #[test]
     fn example() {
         let data = example_data();
-        let table = create_table(&data).unwrap();
+        let table = TableGuests::new(&data).unwrap();
         assert_eq!(run_1(&table).0, 330);
     }
 

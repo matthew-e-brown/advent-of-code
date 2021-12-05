@@ -1,5 +1,5 @@
 use utils::cli::{parse_cli, Part};
-use day13::{create_table, run_1, run_2};
+use day13::{run_1, run_2, TableGuests};
 
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
         "Advent of Code 2015, day 13"
     );
 
-    match create_table(&config.data) {
+    match TableGuests::new(&config.data) {
         Ok(table) => {
             let (delta, order) = match config.part {
                 Part::One => run_1(&table),
