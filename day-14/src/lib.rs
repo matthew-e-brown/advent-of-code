@@ -1,11 +1,18 @@
 use regex::Regex;
 
-#[derive(Debug, Clone)]
 pub struct Reindeer {
-    name: String,
-    speed: usize,
-    running_time: usize,
-    resting_time: usize,
+    pub name: String,
+    pub speed: usize,
+    pub running_time: usize,
+    pub resting_time: usize,
+}
+
+struct Competitor<'a> {
+    reindeer: &'a Reindeer,
+    distance: usize,
+    is_resting: bool,
+    current_running_time: usize,
+    current_resting_time: usize,
 }
 
 
@@ -33,45 +40,66 @@ impl Reindeer {
 }
 
 
+impl<'a> Competitor<'a> {
 
-fn let_them_fly(reindeer: &Reindeer, time: usize) -> usize {
-    let mut resting = false;
-    let mut current_resting_time = 0;
-    let mut current_running_time = 0;
-    let mut total_distance = 0;
+    fn new(reindeer: &'a Reindeer) -> Self {
+        Self {
+            reindeer,
+            is_resting: false,
+            current_resting_time: 0,
+            current_running_time: 0,
+            distance: 0,
+        }
+    }
 
-    for _ in 0..time {
-        if !resting {
-            current_running_time += 1;
+    fn tick(&mut self) -> () {
+        if !self.is_resting {
+            self.current_running_time += 1;
 
             // Check if we need to start resting on the next second
-            if current_running_time >= reindeer.running_time {
-                resting = true;
-                current_resting_time = 0;
+            if self.current_running_time >= self.reindeer.running_time {
+                self.is_resting = true;
+                self.current_resting_time = 0;
             }
 
-            total_distance += reindeer.speed;
+            self.distance += self.reindeer.speed;
         } else {
-            current_resting_time += 1;
+            self.current_resting_time += 1;
 
             // Check if we can wake up on the next second
-            if current_resting_time >= reindeer.resting_time {
-                resting = false;
-                current_running_time = 0;
+            if self.current_resting_time >= self.reindeer.resting_time {
+                self.is_resting = false;
+                self.current_running_time = 0;
             }
         }
     }
 
-    total_distance
 }
 
 
 pub fn run_1(reindeer: &Vec<Reindeer>) -> Result<(&String, usize), &'static str> {
-    reindeer
+
+    if reindeer.len() < 1 {
+        return Err("There needs to be at least one competitor!");
+    }
+
+    let mut reindeer: Vec<_> = reindeer
         .iter()
-        .map(|r| (&r.name, let_them_fly(&r, 2503)) )
-        .max_by(|r1, r2| r1.1.cmp(&r2.1))
-        .ok_or("Empty vector.")
+        .map(|r| Competitor::new(r))
+        .collect();
+
+    for _tick in 0..2503 {
+        for r in reindeer.iter_mut() {
+            r.tick();
+        }
+    }
+
+    let winner = reindeer
+        .iter()
+        .max_by(|a, b| a.distance.cmp(&b.distance))
+        .unwrap();
+
+    Ok((&winner.reindeer.name, winner.distance))
 }
 
 
@@ -82,14 +110,24 @@ mod tests {
 
     #[test]
     fn example() {
-        let reindeer = vec![
+        let reindeer = Reindeer::new_from_list(&vec![
             "Comet can fly 14 km/s for 10 seconds, but then must rest for 127 seconds.".to_owned(),
             "Dancer can fly 16 km/s for 11 seconds, but then must rest for 162 seconds.".to_owned()
-        ];
-        let reindeer = Reindeer::new_from_list(&reindeer).unwrap();
+        ]).unwrap();
 
-        assert_eq!(let_them_fly(&reindeer[0], 1000), 1120);
-        assert_eq!(let_them_fly(&reindeer[1], 1000), 1056);
+        let mut reindeer = reindeer.iter()
+            .map(|r| Competitor::new(r))
+            .collect::<Vec<_>>();
+
+        for _tick in 0..1000 {
+            for r in reindeer.iter_mut() {
+                r.tick();
+            }
+        }
+
+        assert_eq!(reindeer[0].distance, 1120);
+        assert_eq!(reindeer[1].distance, 1056);
+
     }
 
 }
