@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use regex::Regex;
 
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub struct Reindeer {
     pub name: String,
     pub speed: usize,
@@ -7,6 +9,7 @@ pub struct Reindeer {
     pub resting_time: usize,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq)]
 struct Competitor<'a> {
     reindeer: &'a Reindeer,
     distance: usize,
@@ -18,7 +21,7 @@ struct Competitor<'a> {
 
 impl Reindeer {
 
-    pub fn new_from_list(list: &Vec<String>) -> Result<Vec<Self>, String> {
+    pub fn new_list(list: &Vec<String>) -> Result<Vec<Self>, String> {
         let re = Regex::new(r"^(\w+).+?(\d+) km/s.+?(\d+) seconds.+?(\d+) seconds\.?$").unwrap();
 
         let mut result = Vec::new();
@@ -52,6 +55,19 @@ impl<'a> Competitor<'a> {
         }
     }
 
+    fn new_list(reindeer: &'a Vec<Reindeer>) -> Result<Vec<Self>, &'static str> {
+        if reindeer.len() < 1 {
+            return Err("There needs to be at least one competitor!");
+        }
+
+        let result = reindeer
+            .iter()
+            .map(|r| Competitor::new(r))
+            .collect::<Vec<_>>();
+
+        Ok(result)
+    }
+
     fn tick(&mut self) -> () {
         if !self.is_resting {
             self.current_running_time += 1;
@@ -77,18 +93,11 @@ impl<'a> Competitor<'a> {
 }
 
 
-pub fn run_1(reindeer: &Vec<Reindeer>) -> Result<(&String, usize), &'static str> {
+pub fn run_1(reindeer: &Vec<Reindeer>, time: usize) -> Result<(&String, usize), &'static str> {
 
-    if reindeer.len() < 1 {
-        return Err("There needs to be at least one competitor!");
-    }
+    let mut reindeer = Competitor::new_list(reindeer)?;
 
-    let mut reindeer: Vec<_> = reindeer
-        .iter()
-        .map(|r| Competitor::new(r))
-        .collect();
-
-    for _tick in 0..2503 {
+    for _second in 0..time {
         for r in reindeer.iter_mut() {
             r.tick();
         }
@@ -103,17 +112,61 @@ pub fn run_1(reindeer: &Vec<Reindeer>) -> Result<(&String, usize), &'static str>
 }
 
 
+pub fn run_2(reindeer: &Vec<Reindeer>, time: usize) -> Result<(&String, usize), &'static str> {
+
+    let mut reindeer = Competitor::new_list(reindeer)?;
+    let mut points = HashMap::new();
+
+    for _second in 0..time {
+        for r in reindeer.iter_mut() {
+            r.tick();
+        }
+
+        // Can't use max_by because we need to handle the case where there's a tie
+
+        // Find what the max distance is...
+        let mut winning_distance = 0;
+        for competitor in reindeer.iter() {
+            if competitor.distance > winning_distance {
+                winning_distance = competitor.distance;
+            }
+        }
+
+        // ...and increment *all* the reindeer with that distance
+        for competitor in reindeer.iter() {
+            if competitor.distance == winning_distance {
+                points
+                    .entry(competitor.reindeer)
+                    .and_modify(|p| *p += 1)
+                    .or_insert(1usize);
+            }
+        }
+    }
+
+    let (winner, points) = points
+        .iter()
+        .max_by(|(_, &a), (_, &b)| a.cmp(&b))
+        .unwrap();
+
+    Ok((&winner.name, *points))
+}
+
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
-    #[test]
-    fn example() {
-        let reindeer = Reindeer::new_from_list(&vec![
+    fn example_data() -> Vec<Reindeer> {
+        Reindeer::new_list(&vec![
             "Comet can fly 14 km/s for 10 seconds, but then must rest for 127 seconds.".to_owned(),
             "Dancer can fly 16 km/s for 11 seconds, but then must rest for 162 seconds.".to_owned()
-        ]).unwrap();
+        ]).unwrap()
+    }
+
+    #[test]
+    fn example_1() {
+        let reindeer = example_data();
 
         let mut reindeer = reindeer.iter()
             .map(|r| Competitor::new(r))
@@ -128,6 +181,15 @@ mod tests {
         assert_eq!(reindeer[0].distance, 1120);
         assert_eq!(reindeer[1].distance, 1056);
 
+    }
+
+    #[test]
+    fn example_2() {
+        let reindeer = example_data();
+        let (winner, points) = run_2(&reindeer, 1000).unwrap();
+
+        assert_eq!(&winner[..], "Dancer");
+        assert_eq!(points, 689);
     }
 
 }
