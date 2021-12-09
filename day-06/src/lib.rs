@@ -1,63 +1,72 @@
-#[derive(Clone)]
-pub struct Fishy {
-    timer: u8,
-}
-
-impl Fishy {
-
-    fn new_from(timer: u8) -> Self {
-        Self { timer }
-    }
-
-    fn new() -> Self {
-        Self::new_from(8)
-    }
-
-    fn tick(&mut self) -> bool {
-        if self.timer == 0 {
-            self.timer = 6;
-            true
-        } else {
-            self.timer -= 1;
-            false
-        }
-    }
-
-}
-
-
-pub fn school_from_string(string: &str) -> Result<Vec<Fishy>, &'static str> {
+fn parse(string: &str) -> Result<Vec<u8>, &'static str> {
     string
         .split(",")
         .map(|s| {
-            if let Ok(s) = s.parse() {
-                Ok(Fishy::new_from(s))
-            } else {
-                Err("Encountered malformed sequence.")
+            match s.parse::<u8>() {
+                Ok(n) if n <= 8 => Ok(n),
+                Ok(_) => Err("Fishy's lifespan must be between 0 and 8."),
+                Err(_) => Err("Encountered malformed sequence."),
             }
         })
         .collect()
 }
 
 
-pub fn run(fishies: &Vec<Fishy>, days: usize) -> usize {
-    let mut fishies = fishies.clone();
+pub fn run(fishies: &str, days: usize) -> Result<usize, &'static str> {
+    let fishies = parse(fishies)?;
+
+    // Each index `n` in the array of spawn timers holds how many fish have that many days to go.  
+    // Use two arrays and alternate between them for current and next day
+    let mut timers_1 = [0usize; 9];
+    let mut timers_2 = [0usize; 9];
+    let mut which = true;
+
+    for n in fishies {
+        timers_1[n as usize] += 1;
+    }
+
+    #[cfg(test)]
+    println!("curr => {:?}\nnext => {:?}\n", timers_1, timers_2);
 
     for _ in 0..days {
+        let (current, next) = match which {
+            true => (&mut timers_1, &mut timers_2),
+            false => (&mut timers_2, &mut timers_1),
+        };
 
-        let mut born_today = Vec::new();
+        which = !which;
 
-        for fishy in fishies.iter_mut() {
-            if fishy.tick() {
-                born_today.push(Fishy::new());
+        // Zero out tomorrow
+        next.iter_mut().for_each(|e| *e = 0);
+
+        for n in 0..9 {
+            if n == 0 {
+                // All fish reset their timers
+                next[6] += current[n];
+                // And they also all give birth to new fish with timers at 8 days
+                next[8] += current[n];
+            } else {
+                next[n - 1] += current[n];
             }
         }
 
-        fishies.extend(born_today);
-
+        #[cfg(test)]
+        println!(
+            "{} => {:?}\n{} => {:?}\n",
+            if which { "curr" } else { "next" }, timers_1,
+            if which { "next" } else { "curr" }, timers_2,
+        );
     }
 
-    fishies.len()
+    let last_day = match which {
+        true => &timers_1,
+        false => &timers_2,
+    };
+
+    #[cfg(test)]
+    println!("{:?}", last_day);
+
+    Ok(last_day.iter().sum())
 }
 
 
@@ -67,8 +76,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn example() {
-        let start = school_from_string("3,4,3,1,2").unwrap();
-        assert_eq!(run(&start, 18), 26);
+    fn example_1() {
+        assert_eq!(run("3,4,3,1,2", 18).unwrap(), 26);
     }
+
+    #[test]
+    fn example_2() {
+        assert_eq!(run("3,4,3,1,2", 80).unwrap(), 5934);
+    }
+
 }
