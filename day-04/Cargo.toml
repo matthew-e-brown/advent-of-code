@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 test-case = "1.2.1"
-utils = { path = "../utils" }
+utils = { git = "https://github.com/matthew-e-brown/aoc-utils" }
 md5 = "0.7.0"

@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 test-case = "1.2.1"
-utils = { path = "../utils" }
+utils = { git = "https://github.com/matthew-e-brown/aoc-utils" }
 lazy_static = "1.4.0"
 regex = "1.5.4"
