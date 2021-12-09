@@ -53,8 +53,8 @@ pub fn run(fishies: &str, days: usize) -> Result<usize, &'static str> {
         #[cfg(test)]
         println!(
             "{} => {:?}\n{} => {:?}\n",
-            if which { "curr" } else { "next" }, timers_1,
-            if which { "next" } else { "curr" }, timers_2,
+            if which { "current" } else { "   next" }, timers_1,
+            if which { "   next" } else { "current" }, timers_2,
         );
     }
 
@@ -83,6 +83,11 @@ mod tests {
     #[test]
     fn example_2() {
         assert_eq!(run("3,4,3,1,2", 80).unwrap(), 5934);
+    }
+
+    #[test]
+    fn example_3() {
+        assert_eq!(run("3,4,3,1,2", 256).unwrap(), 26_984_457_539)
     }
 
 }
