@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 test-case = "1.2.1"
-utils = { git = "https://github.com/matthew-e-brown/aoc-utils" }
+utils = { path = "../../rust-utils" }

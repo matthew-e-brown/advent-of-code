@@ -376,7 +376,6 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 [[package]]
 name = "utils"
 version = "0.4.0"
-source = "git+https://github.com/matthew-e-brown/aoc-utils#053f636de623dd87989a6f783e5b7d48cbfb0cb5"
 dependencies = [
  "clap",
 ]
