@@ -1,0 +1,6 @@
+.vscode/
+
+# just in case these come up
+node_modules/
+target/
+bin/
