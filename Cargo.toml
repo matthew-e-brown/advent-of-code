@@ -1,0 +1,19 @@
+[workspace]
+
+members = [
+  "day-01",
+  "day-02",
+  "day-03",
+  "day-04",
+  "day-05/challenge",
+  "day-05/regex",
+  "day-06",
+  "day-07",
+  "day-08",
+  "day-09",
+  "day-10",
+  "day-11",
+  "day-12",
+  "day-13",
+  "day-14"
+]
