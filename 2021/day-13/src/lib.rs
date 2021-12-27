@@ -162,28 +162,21 @@ pub fn parse(data: &Vec<String>) -> Result<(Paper, Vec<Fold>), String> {
 }
 
 
-pub fn run_1(paper: &Paper, fold: &Fold) -> usize {
-    let mut paper = paper.clone();
+pub fn run_1(paper: &mut Paper, fold: &Fold) {
     paper.fold(fold);
 
     #[cfg(test)]
     println!("{}\n------\n", paper);
-
-    paper.count()
 }
 
 
-pub fn run_2(paper: &Paper, folds: &Vec<Fold>) -> usize {
-    let mut paper = paper.clone();
-
+pub fn run_2(paper: &mut Paper, folds: &Vec<Fold>) {
     for fold in folds {
         paper.fold(fold);
 
         #[cfg(test)]
         println!("{}\n------\n", paper);
     }
-
-    paper.count()
 }
 
 
@@ -241,8 +234,17 @@ mod tests {
 
         println!("Before:\n{}\n------\n", paper);
 
-        assert_eq!(run_1(&paper, &folds[0]), 17);
-        assert_eq!(run_2(&paper, &folds), 16);
+        {
+            let mut paper = paper.clone();
+            run_1(&mut paper, &folds[0]);
+            assert_eq!(paper.count(), 17);
+        }
+
+        {
+            let mut paper = paper.clone();
+            run_2(&mut paper, &folds);
+            assert_eq!(paper.count(), 16);
+        }
     }
 
 }
