@@ -104,17 +104,17 @@ impl Paper {
         self.dots.len()
     }
 
-    pub fn fold(&mut self, fold: Fold) {
+    pub fn fold(&mut self, fold: &Fold) {
         let find_new_dot: fn(Dot, usize) -> Dot = match fold.axis {
             // If the fold is along the 'x' axis, 'y' is changing
             Axis::X => |dot, p| Dot {
-                x: dot.x,
-                y: if dot.y > p { dot.y - p } else { dot.y },
+                x: if dot.x > p { p - (dot.x - p) } else { dot.x },
+                y: dot.y,
             },
             // Otherwise, 'x' is changing
             Axis::Y => |dot, p| Dot {
-                x: if dot.x > p { dot.x - p } else { dot.x },
-                y: dot.y,
+                x: dot.x,
+                y: if dot.y > p { p - (dot.y - p) } else { dot.y },
             },
         };
 
@@ -162,6 +162,31 @@ pub fn parse(data: &Vec<String>) -> Result<(Paper, Vec<Fold>), String> {
 }
 
 
+pub fn run_1(paper: &Paper, fold: &Fold) -> usize {
+    let mut paper = paper.clone();
+    paper.fold(fold);
+
+    #[cfg(test)]
+    println!("{}\n------\n", paper);
+
+    paper.count()
+}
+
+
+pub fn run_2(paper: &Paper, folds: &Vec<Fold>) -> usize {
+    let mut paper = paper.clone();
+
+    for fold in folds {
+        paper.fold(fold);
+
+        #[cfg(test)]
+        println!("{}\n------\n", paper);
+    }
+
+    paper.count()
+}
+
+
 #[cfg(test)]
 mod tests {
 
@@ -185,6 +210,8 @@ mod tests {
 
         assert!(results.is_ok());
 
+        let (paper, _) = results.unwrap();
+
         assert_eq!("\
             ...#..#..#.\n\
             ....#......\n\
@@ -201,8 +228,21 @@ mod tests {
             ......#...#\n\
             #..........\n\
             #.#........".to_owned(),
-            format!("{}", results.unwrap().0)
+            format!("{}", paper)
         );
+
+        assert_eq!(paper.count(), 18);
+    }
+
+    #[test]
+    fn example() {
+        let data = example_data();
+        let (paper, folds) = parse(&data).unwrap();
+
+        println!("Before:\n{}\n------\n", paper);
+
+        assert_eq!(run_1(&paper, &folds[0]), 17);
+        assert_eq!(run_2(&paper, &folds), 16);
     }
 
 }
