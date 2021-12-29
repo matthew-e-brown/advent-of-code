@@ -1,5 +1,5 @@
 use utils::cli::{parse_cli, Part};
-use day9::{parse, run_1};
+use day9::{parse, run_1, run_2};
 
 fn main() {
 
@@ -14,7 +14,10 @@ fn main() {
                 let result = run_1(&map);
                 println!("The sum of all risk-levels is {}.", result);
             },
-            Part::Two => todo!(),
+            Part::Two => {
+                let result = run_2(&map);
+                println!("The product of the top three basin-sizes is {}.", result);
+            },
         },
         Err(e) => eprintln!("{}", e),
     }
