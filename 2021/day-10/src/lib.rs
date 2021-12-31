@@ -6,17 +6,6 @@ pub enum BracketType {
     Angled,
 }
 
-impl BracketType {
-    pub fn score(&self) -> usize {
-        match self {
-            BracketType::Round =>   3,
-            BracketType::Square =>  57,
-            BracketType::Curly =>   1197,
-            BracketType::Angled =>  25137,
-        }
-    }
-}
-
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Bracket {
@@ -53,35 +42,70 @@ impl Line {
         Ok(Self { inner: brackets })
     }
 
-    /// Returns `None` if the line is not corrupted (I.E. if it is 'incomplete' instead of corrupted), and returns
-    /// an option that contains the broken bracket otherwise.
-    pub fn is_corrupted(&self) -> Option<BracketType> {
+    fn check(&self) -> (Option<BracketType>, Option<Vec<BracketType>>) {
         let mut stack = Vec::new();
         for &bracket in self.inner.iter() {
             match bracket {
                 Bracket::Opening(bracket) => stack.push(bracket),
-                // If this is a closing bracket, check that it matches the most recently pushed opening bracket
                 Bracket::Closing(current) => match stack.pop() {
+                    // If this is a closing bracket, check that it matches the most recently pushed opening bracket
                     Some(expected) if expected == current => continue,
-                    _ => return Some(current),
+                    // If not, this is a syntax error
+                    _ => return (Some(current), None)
                 },
             }
         }
 
-        None
+        (None, Some(stack))
     }
 
+    fn check_corruption(&self) -> Option<BracketType> {
+        self.check().0
+    }
+
+    fn check_incomplete(&self) -> Option<Vec<BracketType>> {
+        self.check().1
+    }
 }
 
 
 pub fn run_1(data: &Vec<Line>) -> usize {
     data
         .iter()
-        .map(|line| line.is_corrupted())
-        .fold(0, |acc, cur| acc + match cur {
-            Some(bracket_type) => bracket_type.score(),
-            None => 0,
+        .map(|line| line.check_corruption())
+        .filter(|line| line.is_some())
+        .fold(0, |acc, cur| {
+            let score = match cur.unwrap() {
+                BracketType::Round =>   3,
+                BracketType::Square =>  57,
+                BracketType::Curly =>   1197,
+                BracketType::Angled =>  25137,
+            };
+
+            acc + score
         })
+}
+
+
+pub fn run_2(data: &Vec<Line>) -> usize {
+    let scores = data
+        .iter()
+        .map(|line| line.check_incomplete())
+        .filter(|line| line.is_some())
+        .map(|line| {
+            let stack = line.unwrap();
+            stack.iter().rev().fold(0, |acc, &cur| {
+                acc * 5 + match cur {
+                    BracketType::Round =>   1,
+                    BracketType::Square =>  2,
+                    BracketType::Curly =>   3,
+                    BracketType::Angled =>  4,
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    scores[scores.len() / 2 + 1]
 }
 
 
@@ -101,14 +125,41 @@ mod tests {
     #[test_case("[<(<(<(<{}))><([]([]()",   Some(BracketType::Round); "case 8")]
     #[test_case("<{([([[(<>()){}]>(<<{{",   Some(BracketType::Angled); "case 9")]
     #[test_case("<{([{{}}[<[[[<>{}]]]>[]]", None; "case 10")]
-    fn example(line: &str, expected: Option<BracketType>) {
+    fn example_1(line: &str, expected: Option<BracketType>) {
 
         let line = Line::new(line);
         assert!(line.is_ok());
 
         let line = line.unwrap();
 
-        assert_eq!(line.is_corrupted(), expected);
+        assert_eq!(line.check_corruption(), expected);
+    }
+
+
+    #[test_case("[({(<(())[]>[[{[]{<()<>>", true; "case 1")]
+    #[test_case("[(()[<>])]({[<{<<[]>>(", true; "case 2")]
+    #[test_case("{([(<{}[<>[]}>{[]{[(<()>", false; "case 3")]
+    #[test_case("(((({<>}<{<{<>}{[]{[]{}", true; "case 4")]
+    #[test_case("[[<[([]))<([[{}[[()]]]", false; "case 5")]
+    #[test_case("[{[{({}]{}}([{[{{{}}([]", false; "case 6")]
+    #[test_case("{<[[]]>}<{[{[{[]{()[[[]", true; "case 7")]
+    #[test_case("[<(<(<(<{}))><([]([]()", false; "case 8")]
+    #[test_case("<{([([[(<>()){}]>(<<{{", false; "case 9")]
+    #[test_case("<{([{{}}[<[[[<>{}]]]>[]]", true; "case 10")]
+    fn example_2(line: &str, should_be_corrupt: bool) {
+        let line = Line::new(line);
+        assert!(line.is_ok());
+
+        let line = line.unwrap();
+
+        let check = line.check();
+        if should_be_corrupt {
+            assert!(check.0.is_none());
+            assert!(check.1.is_some());
+        } else {
+            assert!(check.0.is_some());
+            assert!(check.1.is_none());
+        }
     }
 
 }
