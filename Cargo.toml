@@ -1,2 +1,3 @@
 [workspace]
 resolver = "2"
+members = ["2024/day-01"]
