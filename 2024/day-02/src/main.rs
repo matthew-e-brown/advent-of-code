@@ -7,16 +7,45 @@ fn main() {
     let file = File::open(path).expect("failed to open file");
     let lines = BufReader::new(file).lines().map(|line| line.expect("failed to read from file"));
 
-    // Could do this with a simple `Iterator::count`, but I suspect I'm gonna need to do something else while
     let mut num_safe = 0;
+    let mut num_almost_safe = 0;
+
+    // Want to iterate each report multiple times, but allocating a new buffer each time would be a tad wasteful. So
+    // make some scratch-space that we'll clear and refill each line.
+    let mut report_buff = Vec::new();
     for line in lines {
-        let report = line.split_whitespace().map(|s| s.parse::<u32>().expect("invalid puzzle input"));
-        if is_safe(report) {
+        let nums = line.split_whitespace().map(|s| s.parse::<u32>().expect("invalid puzzle input"));
+        report_buff.extend(nums);
+
+        if is_safe(report_buff.iter().copied()) {
             num_safe += 1;
+        } else {
+            // We know that each line will only contain 5-8 numbers... so just brute force it, checking each index.
+            // (note: `awk '{ print NF }' input.txt | sort -nr | uniq -c`)
+            let mut can_be_safe = false;
+            for skip in 0..report_buff.len() {
+                // Create an iterator that skips over the i'th element
+                let iter = report_buff
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, n)| (i != skip).then_some(n))
+                    .copied();
+                if is_safe(iter) {
+                    can_be_safe = true;
+                    break;
+                }
+            }
+
+            if can_be_safe {
+                num_almost_safe += 1;
+            }
         }
+
+        report_buff.clear();
     }
 
     println!("Number of safe reports (part 1): {num_safe}");
+    println!("Number of mostly safe reports (part 2): {}", num_safe + num_almost_safe);
 }
 
 
@@ -26,26 +55,23 @@ fn is_safe(mut report: impl Iterator<Item = u32>) -> bool {
     let Some(r2) = report.next() else { return true };
 
     // Check first two elements to determine if we're increasing or decreasing.
-    let inc = r2 > r1;
+    let increasing = r2 > r1;
 
     // Check the difference on these first two before kicking off the loop.
-    let diff = r1.abs_diff(r2);
-    if diff < 1 || diff > 3 {
+    let d = r1.abs_diff(r2);
+    if d < 1 || d > 3 {
         return false;
     }
 
-    let mut last = r2;
+    let mut prev = r2;
     for x in report {
-        if (x > last) != inc {
+        let i = x > prev;
+        let d = x.abs_diff(prev);
+        if i != increasing || d < 1 || d > 3 {
             return false;
         }
 
-        let diff = x.abs_diff(last);
-        if diff < 1 || diff > 3 {
-            return false;
-        }
-
-        last = x;
+        prev = x;
     }
 
     true
