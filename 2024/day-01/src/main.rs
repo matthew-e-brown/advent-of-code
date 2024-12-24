@@ -1,11 +1,6 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-
 pub fn main() {
-    let path = std::env::args().skip(1).next().expect("missing input file path");
-    let file = File::open(path).expect("failed to open file");
-
-    let lines = BufReader::new(file).lines().map(|line| line.expect("failed to read from file"));
+    let input = aoc_utils::puzzle_input();
+    let lines = input.lines();
 
     // Read both lists into vectors
     let mut l = Vec::new();

@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aoc_utils = { version = "*", path = "../../aoc_utils" }
 regex = "1.11.1"

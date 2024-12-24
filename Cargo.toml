@@ -1,3 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["2024/day-01", "2024/day-02", "2024/day-03"]
+members = [
+    "2024/day-01",
+    "2024/day-02",
+    "2024/day-03",
+    "2024/day-04",
+    "aoc_utils",
+]

@@ -1,17 +1,7 @@
-use std::fs::File;
-use std::io::Read;
-
 use regex::Regex;
 
 fn main() {
-    let input = {
-        let path = std::env::args().skip(1).next().expect("missing input file path");
-        let mut file = File::open(path).expect("failed to open file");
-        let mut buf = String::new();
-        file.read_to_string(&mut buf).expect("failed to read from file");
-        buf
-    };
-
+    let input = aoc_utils::puzzle_input();
     println!("Sum of all mul(X,Y) expressions (part 1): {}", part1(&input));
     println!("Sum of just the enabled mul expressions (part 2): {}", part2(&input));
 }
