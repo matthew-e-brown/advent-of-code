@@ -1,0 +1,8 @@
+[package]
+name = "day-04"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aoc_utils = { version = "*", path = "../../aoc_utils" }
+scoped_threadpool = "0.1.9"

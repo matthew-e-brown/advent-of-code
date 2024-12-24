@@ -1,9 +1,14 @@
 //! A small collection of commonly-used Advent of Code utilities, mostly for reading and parsing puzzle input.
 
+pub mod grid;
+
 use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, ValueHint};
+
+pub use self::grid::CharGrid;
+
 
 #[derive(Parser, Debug)]
 struct Input {
