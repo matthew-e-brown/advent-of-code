@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 /// Type alias used to mark page numbers.
 type PageNum = u32;
 
@@ -55,74 +53,63 @@ impl PageGraph {
         for line in lines {
             let (a, b) = parse_edge(line.as_ref());
             graph.get_or_insert_mut(a).push_outgoing(b);
-            graph.get_or_insert_mut(b).push_incoming(a);
         }
 
         graph
+    }
+
+    /// Subsets this graph to contain only the provided nodes.
+    pub fn subset(&self, pages: &[PageNum]) -> Self {
+        // Copy to a sorted version
+        let keep_pages = {
+            let mut v = pages.into_iter().copied().collect::<Vec<_>>();
+            v.sort();
+            v
+        };
+
+        // Start from an empty graph:
+        let mut dst = PageGraph::default();
+        for &keep_num in &keep_pages {
+            // If the original graph contained the node we want to keep, create a new node with the same number, and copy over only the
+            if let Some(keep) = self.get(&keep_num) {
+                let mut clone = Page::new(keep_num);
+                clone.outgoing = keep
+                    .outgoing()
+                    .into_iter()
+                    .filter(|p| keep_pages.binary_search(p).is_ok())
+                    .copied()
+                    .collect();
+                if let Err(i) = dst.pages.binary_search_by_key(&keep_num, |page| page.num()) {
+                    dst.pages.insert(i, clone);
+                }
+            }
+        }
+
+        dst
     }
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Page {
     num: PageNum,
-    incoming: Vec<PageNum>,
     outgoing: Vec<PageNum>,
 }
 
 impl Page {
     pub fn new(num: PageNum) -> Self {
-        Page {
-            num,
-            incoming: Vec::new(),
-            outgoing: Vec::new(),
-        }
+        Page { num, outgoing: Vec::new() }
     }
 
     pub fn num(&self) -> PageNum {
         self.num
     }
 
-    pub fn incoming(&self) -> &[PageNum] {
-        &self.incoming
-    }
-
     pub fn outgoing(&self) -> &[PageNum] {
         &self.outgoing
-    }
-
-    pub fn has_incoming(&self, num: &PageNum) -> bool {
-        self.incoming.binary_search(&num).is_ok()
-    }
-
-    pub fn has_outgoing(&self, num: &PageNum) -> bool {
-        self.outgoing.binary_search(&num).is_ok()
-    }
-
-    pub fn push_incoming(&mut self, num: PageNum) {
-        let i = self.incoming.binary_search(&num).unwrap_or_else(|i| i);
-        self.incoming.insert(i, num);
     }
 
     pub fn push_outgoing(&mut self, num: PageNum) {
         let i = self.outgoing.binary_search(&num).unwrap_or_else(|i| i);
         self.outgoing.insert(i, num);
-    }
-
-    pub fn remove_incoming(&mut self, num: &PageNum) -> bool {
-        if let Ok(i) = self.incoming.binary_search(&num) {
-            self.incoming.remove(i);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn remove_outgoing(&mut self, num: &PageNum) -> bool {
-        if let Ok(i) = self.outgoing.binary_search(&num) {
-            self.outgoing.remove(i);
-            true
-        } else {
-            false
-        }
     }
 }

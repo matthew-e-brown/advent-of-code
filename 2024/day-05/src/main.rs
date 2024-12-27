@@ -22,11 +22,15 @@ fn main() {
             sorted_mid_sums += pages[pages.len() / 2];
         } else {
             // This has gotta be the most inefficient way to possibly do this...
+
+            // Subset only the pages that matter, then use that subgraph to sort the pages:
+            let subset = graph.subset(&pages);
             pages.sort_by(|a, b| {
-                // If there exists a path from a->b, then a must come before b.
-                if bfs(&graph, a, b) {
+                // If there exists a path from `a->b`, then `a` must come before `b`.
+                if bfs(&subset, a, b) {
                     Ordering::Less
-                } else if bfs(&graph, b, a) {
+                } else if bfs(&subset, b, a) {
+                    // Again... probably not that efficient to do a whole BFS twice. Oh well.
                     Ordering::Greater
                 } else {
                     Ordering::Equal
