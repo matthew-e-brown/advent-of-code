@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::ops::{Index, IndexMut};
 
 use thiserror::Error;
@@ -39,6 +40,41 @@ impl<T> Grid<T> {
         (self.w, self.h)
     }
 
+    pub fn contains<Idx: GridIndex>(&self, pos: Idx) -> bool {
+        let (x, y) = pos.as_tuple();
+        x < self.w && y < self.h
+    }
+
+    pub fn get<Idx: GridIndex>(&self, pos: Idx) -> Option<&T> {
+        let (x, y) = pos.as_tuple();
+        if self.contains((x, y)) {
+            // SAFETY: Just checked bounds.
+            Some(unsafe { self.get_unchecked((x, y)) })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut<Idx: GridIndex>(&mut self, pos: Idx) -> Option<&mut T> {
+        let (x, y) = pos.as_tuple();
+        if self.contains((x, y)) {
+            // SAFETY: Just checked bounds.
+            Some(unsafe { self.get_unchecked_mut((x, y)) })
+        } else {
+            None
+        }
+    }
+
+    pub unsafe fn get_unchecked<Idx: GridIndex>(&self, pos: Idx) -> &T {
+        let idx = pos.index1d(self.width());
+        self.buf.get_unchecked(idx)
+    }
+
+    pub unsafe fn get_unchecked_mut<Idx: GridIndex>(&mut self, pos: Idx) -> &mut T {
+        let idx = pos.index1d(self.width());
+        self.buf.get_unchecked_mut(idx)
+    }
+
     /// Creates a new grid of characters, running each one through a mapping function first.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
@@ -75,38 +111,91 @@ impl<T> Grid<T> {
     }
 }
 
-impl<T> Index<[usize; 2]> for Grid<T> {
+impl<T, I: GridIndex> Index<I> for Grid<T> {
     type Output = T;
 
-    fn index(&self, index: [usize; 2]) -> &Self::Output {
-        let [x, y] = index;
-        let idx = y * self.w + x;
-        &self.buf[idx]
+    fn index(&self, index: I) -> &Self::Output {
+        let i = index.index1d(self.width());
+        &self.buf[i]
     }
 }
 
-impl<T> IndexMut<[usize; 2]> for Grid<T> {
-    fn index_mut(&mut self, index: [usize; 2]) -> &mut Self::Output {
-        let [x, y] = index;
-        let idx = y * self.w + x;
-        &mut self.buf[idx]
+impl<T, I: GridIndex> IndexMut<I> for Grid<T> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        let i = index.index1d(self.width());
+        &mut self.buf[i]
     }
 }
 
-impl<T> Index<(usize, usize)> for Grid<T> {
-    type Output = T;
+impl<T> Debug for Grid<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Grid:")?;
+        for y in 0..self.h {
+            for x in 0..self.w {
+                write!(f, "{:?}", &self[[x, y]])?;
+            }
+            writeln!(f)?;
+        }
 
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (x, y) = index;
-        let idx = y * self.w + x;
-        &self.buf[idx]
+        writeln!(f, "Size: {}×{}", self.w, self.h)?;
+        Ok(())
     }
 }
 
-impl<T> IndexMut<(usize, usize)> for Grid<T> {
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (x, y) = index;
-        let idx = y * self.w + x;
-        &mut self.buf[idx]
+/// A trait representing objects that can be used to index a [two-dimensional grid][Grid].
+pub trait GridIndex {
+    /// Gets the `x`-component of this [GridIndex].
+    fn x(&self) -> usize;
+
+    /// Gets the `y`-component of this [GridIndex].
+    fn y(&self) -> usize;
+
+    /// Normalizes this index as a tuple to make it easier to destructure the `x` and `y` components.
+    fn as_tuple(&self) -> (usize, usize) {
+        (self.x(), self.y())
     }
+
+    /// Given a grid-width, converts this [GridIndex] into a single one-dimensional buffer offset.
+    fn index1d(&self, w: usize) -> usize {
+        self.y() * w + self.x()
+    }
+}
+
+#[rustfmt::skip]
+impl GridIndex for (usize, usize) {
+    fn x(&self) -> usize { self.0 }
+    fn y(&self) -> usize { self.1 }
+}
+
+#[rustfmt::skip]
+impl GridIndex for &(usize, usize) {
+    fn x(&self) -> usize { self.0 }
+    fn y(&self) -> usize { self.1 }
+}
+
+#[rustfmt::skip]
+impl GridIndex for (&usize, &usize) {
+    fn x(&self) -> usize { *self.0 }
+    fn y(&self) -> usize { *self.1 }
+}
+
+#[rustfmt::skip]
+impl GridIndex for [usize; 2] {
+    fn x(&self) -> usize { self[0] }
+    fn y(&self) -> usize { self[1] }
+}
+
+#[rustfmt::skip]
+impl GridIndex for &[usize; 2] {
+    fn x(&self) -> usize { self[0] }
+    fn y(&self) -> usize { self[1] }
+}
+
+#[rustfmt::skip]
+impl GridIndex for [&usize; 2] {
+    fn x(&self) -> usize { *self[0] }
+    fn y(&self) -> usize { *self[1] }
 }
