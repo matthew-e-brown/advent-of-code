@@ -6,7 +6,7 @@
 use std::ops::Add;
 use std::sync::mpsc;
 
-use aoc_utils::CharGrid;
+use aoc_utils::Grid;
 use scoped_threadpool::Pool;
 
 // Thought it'd be helpful to return some more metadata from each match, thinking Part 2 would make use of it... nope.
@@ -17,7 +17,7 @@ struct XmasResult {
     dir: Direction,
 }
 
-pub fn main(grid: &CharGrid) -> usize {
+pub fn main(grid: &Grid<char>) -> usize {
     let n_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
     let mut pool = Pool::new(n_threads as u32);
 
@@ -47,7 +47,7 @@ pub fn main(grid: &CharGrid) -> usize {
     num
 }
 
-fn scan(grid: &CharGrid, mut pos: (usize, usize), dir: Direction, channel: mpsc::Sender<XmasResult>) {
+fn scan(grid: &Grid<char>, mut pos: (usize, usize), dir: Direction, channel: mpsc::Sender<XmasResult>) {
     let start = pos;
     let mut curr = 'X';
     loop {

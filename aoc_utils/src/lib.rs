@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueHint};
 
-pub use self::grid::CharGrid;
+pub use self::grid::Grid;
 
 
 #[derive(Parser, Debug)]

@@ -1,9 +1,9 @@
 use std::sync::mpsc;
 
-use aoc_utils::CharGrid;
+use aoc_utils::Grid;
 use scoped_threadpool::Pool;
 
-pub fn main(grid: &CharGrid) -> usize {
+pub fn main(grid: &Grid<char>) -> usize {
     // If the grid is smaller than 3x3, there couldn't be any diagonal MAS's. Allows us to subtract from w/h without
     // worrying about underflow:
     if grid.width() < 3 || grid.height() < 3 {
@@ -37,7 +37,7 @@ pub fn main(grid: &CharGrid) -> usize {
     num
 }
 
-fn check(grid: &CharGrid, pos: (usize, usize), channel: mpsc::Sender<()>) {
+fn check(grid: &Grid<char>, pos: (usize, usize), channel: mpsc::Sender<()>) {
     let (x, y) = pos;
 
     // 'MAS', starting from the top-left and going down-right, or starting from bottom right and going up-left
