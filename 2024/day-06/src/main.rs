@@ -1,15 +1,18 @@
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
+use std::ops::ControlFlow;
 use std::sync::mpsc;
 
 use aoc_utils::Grid;
 use scoped_threadpool::Pool;
 
+type Position = (usize, usize);
+
 fn main() {
     let input = aoc_utils::puzzle_input();
 
     let mut start_pos = None;
-    let mut map = Grid::from_lines_map(input.lines(), |c, pos| match c {
+    let map = Grid::from_lines_map(input.lines(), |c, pos| match c {
         '#' => Cell::WALL,
         '.' => Cell::OPEN,
         '^' => {
@@ -20,57 +23,108 @@ fn main() {
     })
     .unwrap();
 
-    let n_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8) as u32;
-    let mut thread_pool = Pool::new(n_threads);
-    let (send, recv) = mpsc::channel::<(usize, usize)>();
+    let start_pos = start_pos.expect("invalid input: missing start character ('^')");
 
-    let mut pos = start_pos.expect("invalid input: missing start character ('^')");
-    let mut dir = Direction::Up;
-    let mut unique_tiles: usize = 0;
-
-    thread_pool.scoped(|scope| {
-        loop {
-            // If the cell we're currently on has *never* been visited, from any direction, count it as unique.
-            if map[pos] == Cell::OPEN {
-                unique_tiles += 1;
-            }
-
-            // If this is the first time we've visited this cell while travelling in this particular direction, spawn a
-            // thread to run a separate simulation to check for potential loops.
-            if !map[pos].has_been_visited(dir) {
-                // In my Part 1 solution, 5444 unique tiles are visited. Our map is 130x130 1-byte cells. If we assume
-                // some tiles are visited twice in different directions, and say there are about 10,000 visitations in
-                // total, then cloning this map 10,000 times will cost 130*130*10000 bytes or ~161 MiB in total. That's
-                // not really that bad, so I'm okay with this strategy.
-                let map = map.clone();
-                let send = send.clone();
-                scope.execute(move || {
-                    if check_loop(pos, dir, map) {
-                        send.send(pos).unwrap();
-                    }
-                });
-            }
-
-            map[pos].visit(dir);
-
-            // Step forwards and see if we're still in-bounds.
-            if !step(&mut pos, &mut dir, &map) {
-                break;
-            }
+    // Start by taking note of all the fresh tiles we encounter as we loop.
+    let mut all_tiles = Vec::new();
+    let mut num_unique = 0;
+    run_simulation::<(), _>(start_pos, map.clone(), |cell, pos, dir| {
+        // By keeping track of the travelling direction for each tile, we'll be able to place extra wall tiles "in
+        // front" of the agent's path for part 2.
+        all_tiles.push((pos, dir));
+        if cell == Cell::OPEN {
+            num_unique += 1;
         }
+
+        ControlFlow::Continue(())
     });
 
-    drop(send); // Drop original handle so that the completion of the last thread causes a hangup
-    // Collect into a set before counting so that we can count *unique* positions.
-    let possible_loops = recv.iter().collect::<BTreeSet<_>>().len();
+    let n_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+    let mut pool = Pool::new(n_threads as u32);
 
-    println!("Number of unique tiles encountered (part 1): {unique_tiles}");
-    println!("Number of possible loops (part 2): {possible_loops}");
+    // Then for each of the tiles we encountered, check if placing an obstacle directly in front of the agent would have
+    // caused a loop to appear.
+    let num_loops = pool.scoped(|scope| {
+        let (send, recv) = mpsc::channel();
+        for &(pos, dir) in &all_tiles {
+            let mut map = map.clone();
+
+            // If the tile in front of us isn't already a wall, add a wall there and then begin the simulation.
+            let obs_pos = match in_front(pos, dir, &map) {
+                None => continue,
+                Some(p) if map[p].is_wall() || p == start_pos => continue,
+                Some(p) => p,
+            };
+
+            map[obs_pos] = Cell::WALL;
+
+            let send = send.clone();
+            scope.execute(move || {
+                // Run the entire simulation again from the start just to cover our bases. This could be made much more
+                // efficient, but should be good enough for now.
+                let loop_detected = run_simulation(start_pos, map, |cell, _, dir| {
+                    // If, during the course of this simulation, we encounter a cell that we have already visited, while
+                    // also going the same direction we were going before, then we have a loop.
+                    if cell.has_been_visited(dir) {
+                        ControlFlow::Break(())
+                    } else {
+                        ControlFlow::Continue(())
+                    }
+                })
+                .is_some();
+
+                if loop_detected {
+                    send.send(obs_pos).unwrap();
+                }
+            });
+        }
+
+        drop(send); // Now all senders are in the threads, so the channel will hang up when the last thread finishes.
+        recv.iter().collect::<BTreeSet<_>>().len()
+    });
+
+    println!("Number of unique tiles encountered (part 1): {}", num_unique);
+    println!("Number of possible loops (part 2): {}", num_loops);
+}
+
+/// Performs the main loop of running a simulation of an agent in a maze.
+///
+/// `on_visit` accepts a closure to run once for each cell in the grid. That closure should return a [`ControlFlow`]
+/// dictating whether or not the simulation should continue looping or not. If the loop is stopped by a
+/// [`ControlFlow::Break`], then the whole function will return a `Some(T)` holding the value contained by the `Break`.
+fn run_simulation<T, F>(mut pos: Position, mut map: Grid<Cell>, mut on_visit: F) -> Option<T>
+where
+    F: FnMut(Cell, Position, Direction) -> ControlFlow<T, ()>,
+{
+    let mut dir = Direction::Up;
+    'outer: loop {
+        if let ControlFlow::Break(res) = on_visit(map[pos], pos, dir) {
+            break 'outer Some(res);
+        }
+
+        map[pos].visit(dir);
+
+        // Step forwards and see if we're still in-bounds. Just in case we hit a corner, we use a loop to determine the
+        // next position (may have to turn more than once before stepping forwards).
+        'inner: loop {
+            match in_front(pos, dir, &map) {
+                // If the next step is a wall, rotate and try again.
+                Some(next_pos) if map[next_pos].is_wall() => dir.turn_right(),
+                // If the next spot isn't a wall, take the step and continue.
+                Some(next_pos) => {
+                    pos = next_pos;
+                    break 'inner;
+                },
+                // If the next step is out of bounds, stop the whole loop.
+                None => break 'outer None,
+            }
+        }
+    }
 }
 
 /// Returns the tile directly "in front" of a given position, in the given direction, unless it is outside the bounds of
 /// the given grid.
-fn in_front(pos: (usize, usize), dir: Direction, map: &Grid<Cell>) -> Option<(usize, usize)> {
+const fn in_front(pos: Position, dir: Direction, map: &Grid<Cell>) -> Option<Position> {
     let (x, y) = pos;
     match dir {
         Direction::Up if y > 0 => Some((x, y - 1)),
@@ -81,55 +135,7 @@ fn in_front(pos: (usize, usize), dir: Direction, map: &Grid<Cell>) -> Option<(us
     }
 }
 
-/// Takes a step "forwards" in the given grid, turning if necessary.
-///
-/// Returns `true` if the new position is still within the bounds of the given `map` (`pos` is not actually mutated in
-/// the event of a would-be out-of-bounds move).
-fn step(pos: &mut (usize, usize), dir: &mut Direction, map: &Grid<Cell>) -> bool {
-    // Just in case we hit a corner or something, use a loop to determine the next position.
-    loop {
-        match in_front(*pos, *dir, map) {
-            // If the next step is a wall, rotate and let the loop try again.
-            Some(next_pos) if map[next_pos].is_wall() => dir.turn_right(),
-            // Otherwise, step forwards to the next position.
-            Some(next_pos) => {
-                *pos = next_pos;
-                return true;
-            },
-            // If the next step is out of bounds, we can stop the whole loop.
-            None => return false,
-        }
-    }
-}
-
-/// Runs a modified version of the simulation to see if placing an obstacle directly in front of the given position
-/// would cause a loop.
-fn check_loop(mut pos: (usize, usize), mut dir: Direction, mut map: Grid<Cell>) -> bool {
-    // Start by placing an obstacle directly in front of the current position:
-    match in_front(pos, dir, &map) {
-        Some(new_pos) => map[new_pos] = Cell::WALL,
-        None => return false,
-    }
-
-    // Now turn right and start looping to see if we eventually create a loop. The only two possible outcomes are (1) a
-    // loop is created, which we can detect by seeing if we have visited a given cell before; and (2) the agent
-    // eventually escapes the map.
-    map[pos].visit(dir);
-    dir.turn_right();
-    loop {
-        if map[pos].has_been_visited(dir) {
-            break true;
-        }
-
-        map[pos].visit(dir);
-
-        if !step(&mut pos, &mut dir, &map) {
-            break false;
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Cell(u8);
 
 impl Cell {
