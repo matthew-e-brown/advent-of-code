@@ -1,7 +1,6 @@
 use std::sync::mpsc;
 
 use aoc_utils::Grid;
-use scoped_threadpool::Pool;
 
 pub fn main(grid: &Grid<char>) -> usize {
     // If the grid is smaller than 3x3, there couldn't be any diagonal MAS's. Allows us to subtract from w/h without
@@ -10,9 +9,7 @@ pub fn main(grid: &Grid<char>) -> usize {
         return 0;
     }
 
-    let n_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
-    let mut pool = Pool::new(n_threads as u32);
-
+    let mut pool = aoc_utils::threadpool();
     let (send, recv) = mpsc::channel::<()>();
 
     pool.scoped(|scope| {

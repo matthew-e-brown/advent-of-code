@@ -65,6 +65,7 @@ name = "aoc_utils"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "scoped_threadpool",
  "thiserror",
 ]
 
@@ -141,7 +142,6 @@ name = "day-04"
 version = "0.1.0"
 dependencies = [
  "aoc_utils",
- "scoped_threadpool",
 ]
 
 [[package]]
@@ -156,7 +156,6 @@ name = "day-06"
 version = "0.1.0"
 dependencies = [
  "aoc_utils",
- "scoped_threadpool",
 ]
 
 [[package]]

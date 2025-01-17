@@ -7,7 +7,6 @@ use std::ops::Add;
 use std::sync::mpsc;
 
 use aoc_utils::Grid;
-use scoped_threadpool::Pool;
 
 // Thought it'd be helpful to return some more metadata from each match, thinking Part 2 would make use of it... nope.
 #[allow(unused)]
@@ -18,10 +17,9 @@ struct XmasResult {
 }
 
 pub fn main(grid: &Grid<char>) -> usize {
-    let n_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
-    let mut pool = Pool::new(n_threads as u32);
-
+    let mut pool = aoc_utils::threadpool();
     let (send, recv) = mpsc::channel::<XmasResult>();
+
     pool.scoped(|scope| {
         for y in 0..grid.height() {
             for x in 0..grid.width() {

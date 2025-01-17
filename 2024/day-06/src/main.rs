@@ -4,7 +4,6 @@ use std::ops::ControlFlow;
 use std::sync::mpsc;
 
 use aoc_utils::Grid;
-use scoped_threadpool::Pool;
 
 type Position = (usize, usize);
 
@@ -39,8 +38,7 @@ fn main() {
         ControlFlow::Continue(())
     });
 
-    let n_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
-    let mut pool = Pool::new(n_threads as u32);
+    let mut pool = aoc_utils::threadpool();
 
     // Then for each of the tiles we encountered, check if placing an obstacle directly in front of the agent would have
     // caused a loop to appear.

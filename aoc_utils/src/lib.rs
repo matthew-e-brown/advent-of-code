@@ -1,4 +1,4 @@
-//! A small collection of commonly-used Advent of Code utilities, mostly for reading and parsing puzzle input.
+//! A small collection of utility functions and re-exports of commonly used third-party crates.
 
 pub mod grid;
 
@@ -6,6 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, ValueHint};
+pub use scoped_threadpool;
 
 pub use self::grid::Grid;
 
@@ -24,4 +25,12 @@ struct Input {
 pub fn puzzle_input() -> String {
     let path = Input::parse().path;
     fs::read_to_string(path).expect("failed to read puzzle input from file")
+}
+
+/// Creates a new threadpool (see [`scoped_threadpool`]).
+///
+/// Consults [`std::thread::available_parallelism`] to see how many threads to create.
+pub fn threadpool() -> scoped_threadpool::Pool {
+    let n = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+    scoped_threadpool::Pool::new(n as u32)
 }
