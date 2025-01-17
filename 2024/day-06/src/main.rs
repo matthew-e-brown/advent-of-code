@@ -46,11 +46,11 @@ fn main() {
     // caused a loop to appear.
     let num_loops = pool.scoped(|scope| {
         let (send, recv) = mpsc::channel();
-        for &(pos, dir) in &all_tiles {
+        for &(check_pos, dir) in &all_tiles {
             let mut map = map.clone();
 
             // If the tile in front of us isn't already a wall, add a wall there and then begin the simulation.
-            let obs_pos = match in_front(pos, dir, &map) {
+            let obs_pos = match in_front(check_pos, dir, &map) {
                 None => continue,
                 Some(p) if map[p].is_wall() || p == start_pos => continue,
                 Some(p) => p,
@@ -97,27 +97,19 @@ where
     F: FnMut(Cell, Position, Direction) -> ControlFlow<T, ()>,
 {
     let mut dir = Direction::Up;
-    'outer: loop {
+    loop {
         if let ControlFlow::Break(res) = on_visit(map[pos], pos, dir) {
-            break 'outer Some(res);
+            break Some(res);
         }
 
         map[pos].visit(dir);
 
-        // Step forwards and see if we're still in-bounds. Just in case we hit a corner, we use a loop to determine the
-        // next position (may have to turn more than once before stepping forwards).
-        'inner: loop {
-            match in_front(pos, dir, &map) {
-                // If the next step is a wall, rotate and try again.
-                Some(next_pos) if map[next_pos].is_wall() => dir.turn_right(),
-                // If the next spot isn't a wall, take the step and continue.
-                Some(next_pos) => {
-                    pos = next_pos;
-                    break 'inner;
-                },
-                // If the next step is out of bounds, stop the whole loop.
-                None => break 'outer None,
-            }
+        // Step forwards and see if we're about to hit a wall or if we've stepped out of bounds or not. When turning
+        // right, let the loop restart so `on_visit` can re-run for the new direction.
+        match in_front(pos, dir, &map) {
+            Some(next_pos) if map[next_pos].is_wall() => dir.turn_right(),
+            Some(next_pos) => pos = next_pos,
+            None => break None,
         }
     }
 }
