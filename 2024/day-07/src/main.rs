@@ -4,15 +4,23 @@ fn main() {
     let input = aoc_utils::puzzle_input();
     let input = input.lines().map(|line| line.parse::<Equation>().unwrap());
 
-    let mut sum = 0;
+    let mut sum1 = 0;
+    let mut sum2 = 0;
     for eq in input {
         let solutions = eq.find_solutions();
         if solutions.len() > 0 {
-            sum += eq.value;
+            sum2 += eq.value;
+
+            // Part 1 didn't have the notion of concatenation, so we only want to count towards its total if
+            let no_concat = solutions.into_iter().all(|sol| !sol.into_iter().any(|op| op == Op::Concat));
+            if no_concat {
+                sum1 += eq.value;
+            }
         }
     }
 
-    println!("Sum of solvable equations (part 1): {sum}");
+    println!("Sum of solvable equations without concatenation (part 1): {sum1}");
+    println!("Sum of solvable equations with concatenation (part 2): {sum2}");
 }
 
 impl FromStr for Equation {
@@ -31,10 +39,11 @@ impl FromStr for Equation {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Op {
     Add,
     Mul,
+    Concat,
 }
 
 #[derive(Clone, Debug)]
@@ -67,11 +76,14 @@ impl Equation {
                 return;
             } else {
                 let mut add_path = duplicate_vec(&path);
-                let mut mul_path = path;
+                let mut mul_path = duplicate_vec(&path);
+                let mut cat_path = path;
                 add_path.push(Op::Add);
                 mul_path.push(Op::Mul);
+                cat_path.push(Op::Concat);
                 recurse(x + r_terms[0], &r_terms[1..], goal, add_path, solutions);
                 recurse(x * r_terms[0], &r_terms[1..], goal, mul_path, solutions);
+                recurse(concat(x, r_terms[0]), &r_terms[1..], goal, cat_path, solutions);
             }
         }
 
@@ -92,4 +104,15 @@ impl Equation {
 
         solution_paths
     }
+}
+
+/// Concatenates the base-10 digits of two numbers.
+const fn concat(mut a: usize, b: usize) -> usize {
+    // - Get number of digits in `b`.
+    // - Shift `a` over by multiplying by that power of ten.
+    // - Add `b` into the new zeroes on the right.
+    let e = if b == 0 { 1 } else { b.ilog10() + 1 };
+    a *= 10usize.pow(e);
+    a += b;
+    a
 }
