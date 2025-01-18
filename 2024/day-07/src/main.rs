@@ -1,26 +1,51 @@
 use std::str::FromStr;
+use std::sync::mpsc;
 
 fn main() {
     let input = aoc_utils::puzzle_input();
     let input = input.lines().map(|line| line.parse::<Equation>().unwrap());
 
-    let mut sum1 = 0;
-    let mut sum2 = 0;
-    for eq in input {
-        let solutions = eq.find_solutions();
-        if solutions.len() > 0 {
-            sum2 += eq.value;
+    let mut pool = aoc_utils::threadpool();
+    let (tx1, rx1) = mpsc::channel();
+    let (tx2, rx2) = mpsc::channel();
+    pool.scoped(|scope| {
+        for eq in input {
+            let tx1 = tx1.clone();
+            let tx2 = tx2.clone();
+            scope.execute(move || {
+                let solutions = eq.find_solutions();
+                if solutions.len() > 0 {
+                    tx2.send(eq.value).unwrap();
 
-            // Part 1 didn't have the notion of concatenation, so we only want to count towards its total if
-            let no_concat = solutions.into_iter().all(|sol| !sol.into_iter().any(|op| op == Op::Concat));
-            if no_concat {
-                sum1 += eq.value;
-            }
+                    // Part 1 didn't have the notion of concatenation, so we only want to count towards its total if
+                    let no_concat = solutions.into_iter().all(|sol| !sol.into_iter().any(|op| op == Op::Concat));
+                    if no_concat {
+                        tx1.send(eq.value).unwrap();
+                    }
+                }
+            });
         }
-    }
+    });
 
+    drop(tx1);
+    drop(tx2);
+    let sum1: usize = rx1.iter().sum();
+    let sum2: usize = rx2.iter().sum();
     println!("Sum of solvable equations without concatenation (part 1): {sum1}");
     println!("Sum of solvable equations with concatenation (part 2): {sum2}");
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Op {
+    Add,
+    Mul,
+    Concat,
+}
+
+#[derive(Clone, Debug)]
+struct Equation {
+    value: usize,
+    terms: Vec<usize>,
 }
 
 impl FromStr for Equation {
@@ -37,27 +62,6 @@ impl FromStr for Equation {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Equation { value, terms })
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Op {
-    Add,
-    Mul,
-    Concat,
-}
-
-#[derive(Clone, Debug)]
-struct Equation {
-    value: usize,
-    terms: Vec<usize>,
-}
-
-/// Clones a vector ensuring it has the same capacity as the original.
-#[inline]
-fn duplicate_vec<T: Clone>(v: &Vec<T>) -> Vec<T> {
-    let mut new = Vec::with_capacity(v.capacity());
-    new.clone_from(&v);
-    new
 }
 
 impl Equation {
@@ -106,7 +110,16 @@ impl Equation {
     }
 }
 
+/// Clones a vector ensuring it has the same capacity as the original.
+#[inline]
+fn duplicate_vec<T: Clone>(v: &Vec<T>) -> Vec<T> {
+    let mut new = Vec::with_capacity(v.capacity());
+    new.clone_from(&v);
+    new
+}
+
 /// Concatenates the base-10 digits of two numbers.
+#[inline]
 const fn concat(mut a: usize, b: usize) -> usize {
     // - Get number of digits in `b`.
     // - Shift `a` over by multiplying by that power of ten.

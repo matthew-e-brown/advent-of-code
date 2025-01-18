@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aoc_utils = { version = "0.1.0", path = "../../aoc_utils" }
+aoc_utils = { version = "*", path = "../../aoc_utils" }
