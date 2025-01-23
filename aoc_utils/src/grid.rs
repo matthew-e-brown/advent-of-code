@@ -1,5 +1,5 @@
 use std::convert::Infallible;
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Write};
 use std::iter;
 use std::ops::{Index, IndexMut};
 
@@ -75,7 +75,7 @@ impl<T: Default> Grid<T> {
     /// Creates a new empty grid filled with the default value for `T`.
     pub fn empty(w: usize, h: usize) -> Self {
         let mut buf = Vec::<T>::with_capacity(w * h);
-        buf.fill_with(Default::default);
+        buf.resize_with(w * h, Default::default);
         Grid {
             w,
             h,
@@ -230,7 +230,14 @@ where
         writeln!(f, "Grid:")?;
         for y in 0..self.h {
             for x in 0..self.w {
-                write!(f, "{:?}", &self[[x, y]])?;
+                if let Some(width) = f.width() {
+                    write!(f, "{:width$?}", &self[[x, y]], width = width)?;
+                    if x < self.w - 1 && width > 0 {
+                        f.write_char(' ')?;
+                    }
+                } else {
+                    write!(f, "{:?}", &self[[x, y]])?;
+                }
             }
             writeln!(f)?;
         }
