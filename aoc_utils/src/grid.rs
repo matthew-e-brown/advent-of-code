@@ -1,4 +1,6 @@
+use std::convert::Infallible;
 use std::fmt::{self, Debug};
+use std::iter;
 use std::ops::{Index, IndexMut};
 
 use thiserror::Error;
@@ -13,8 +15,19 @@ pub struct Grid<T> {
 
 #[derive(Error, Debug, Clone)]
 pub enum ParseGridError {
-    #[error("all columns of an input grid must have the same size: expected width {exp}, found {acc}.")]
-    ColumnSize { exp: usize, acc: usize },
+    #[error("all rows of an input grid must have the same width: expected width {exp}, found {acc}.")]
+    RowSize { exp: usize, acc: usize },
+}
+
+#[derive(Error, Debug, Clone)]
+pub enum TryParseGridError<E> {
+    /// An error occurred parsing the input grid itself (i.e., not ).
+    #[error(transparent)]
+    GridError(#[from] ParseGridError),
+
+    /// An error occurred from within a map function while attempting to parse grid input.
+    #[error("map function returned Err while parsing input grid: {0}")]
+    MapFnError(E),
 }
 
 impl Grid<char> {
@@ -24,6 +37,50 @@ impl Grid<char> {
         S: AsRef<str>,
     {
         Grid::from_lines_map(lines, |c, _| c)
+    }
+}
+
+// [FIXME] There doesn't seem to be a simple (read: not-`unsafe`) way to allocate **exactly** the right amount of bytes;
+// for creating new boxed slices. Vec::with_capacity is allowed to allocate more than asked to, if the compiler/OS
+// decides to. Might be worth looking into eventually, maybe once `std::alloc::Allocator` gets stabilized and is easier
+// to work with.
+
+impl<T: Clone> Grid<T> {
+    /// Creates a new grid by filling it with clones of an element.
+    pub fn from_elem(w: usize, h: usize, val: T) -> Self {
+        let cap = w * h;
+        if cap == 0 {
+            return Grid { w, h, buf: Box::new([]) };
+        }
+
+        let mut buf = Vec::with_capacity(cap);
+
+        // Move first value directly into the buffer without cloning unnecessarily:
+        buf.push(val);
+
+        // Then clone that one into the rest of the vector:
+        for _ in 1..cap {
+            buf.push(buf[0].clone());
+        }
+
+        Grid {
+            w,
+            h,
+            buf: buf.into_boxed_slice(),
+        }
+    }
+}
+
+impl<T: Default> Grid<T> {
+    /// Creates a new empty grid filled with the default value for `T`.
+    pub fn empty(w: usize, h: usize) -> Self {
+        let mut buf = Vec::<T>::with_capacity(w * h);
+        buf.fill_with(Default::default);
+        Grid {
+            w,
+            h,
+            buf: buf.into_boxed_slice(),
+        }
     }
 }
 
@@ -75,7 +132,27 @@ impl<T> Grid<T> {
         self.buf.get_unchecked_mut(idx)
     }
 
-    /// Creates a new grid of characters, running each one through a mapping function first.
+    /// Creates a new grid of the given size, filled with the result of calling `func` once for every (x, y) position of
+    /// the grid.
+    pub fn from_fn<F>(w: usize, h: usize, mut func: F) -> Self
+    where
+        F: FnMut((usize, usize)) -> T,
+    {
+        let mut buf = Vec::with_capacity(w * h);
+        for y in 0..h {
+            for x in 0..w {
+                buf.push(func((x, y)));
+            }
+        }
+
+        Grid {
+            w,
+            h,
+            buf: buf.into_boxed_slice(),
+        }
+    }
+
+    /// Creates a new grid by running each character of the source input through a mapping function.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
     pub fn from_lines_map<I, S, F>(lines: I, mut map_fn: F) -> Result<Self, ParseGridError>
@@ -84,25 +161,43 @@ impl<T> Grid<T> {
         S: AsRef<str>,
         F: FnMut(char, (usize, usize)) -> T,
     {
+        match Self::try_from_lines_map::<Infallible, I, S, _>(lines, move |x, p| Ok(map_fn(x, p))) {
+            Ok(grid) => Ok(grid),
+            Err(TryParseGridError::GridError(err)) => Err(err),
+            Err(TryParseGridError::MapFnError(_)) => unreachable!(), // map_fn never returns Err
+        }
+    }
+
+    /// Creates a new grid by attempting to call the provided
+    pub fn try_from_lines_map<E, I, S, F>(lines: I, mut map_fn: F) -> Result<Self, TryParseGridError<E>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+        F: FnMut(char, (usize, usize)) -> Result<T, E>,
+    {
         let mut lines = lines.into_iter();
+
+        // Grab the first line first before starting the loop so we can eagerly allocate space based on its size.
         let Some(first_line) = lines.next() else {
             return Ok(Grid { w: 0, h: 0, buf: Box::new([]) });
         };
 
-        let first_line = first_line.as_ref();
-        let w = first_line.len();
+        let w = first_line.as_ref().len();
         let mut buf = Vec::with_capacity(w * w); // Assume square to start with; will shrink to boxed_slice later.
+        let mut h = 0;
 
-        buf.extend(first_line.chars().enumerate().map(|(x, c)| map_fn(c, (x, 0))));
-        let mut h = 1;
-
-        for line in lines {
+        let all_lines = iter::once(first_line).chain(lines);
+        for line in all_lines {
             let line = line.as_ref();
             if line.len() == w {
-                buf.extend(line.chars().enumerate().map(|(x, c)| map_fn(c, (x, h))));
+                buf.reserve(line.len()); // NB: *not* `reserve_exact`
+                for (x, c) in line.chars().enumerate() {
+                    let res = map_fn(c, (x, h)).map_err(TryParseGridError::MapFnError)?;
+                    buf.push(res);
+                }
                 h += 1;
             } else {
-                return Err(ParseGridError::ColumnSize { exp: w, acc: line.len() });
+                return Err(ParseGridError::RowSize { exp: w, acc: line.len() }.into());
             }
         }
 
