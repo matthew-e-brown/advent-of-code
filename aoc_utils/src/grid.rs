@@ -21,7 +21,7 @@ pub enum ParseGridError {
 
 #[derive(Error, Debug, Clone)]
 pub enum TryParseGridError<E> {
-    /// An error occurred parsing the input grid itself (i.e., not ).
+    /// An error occurred parsing the input grid itself (as opposed to one caused by a map function).
     #[error(transparent)]
     GridError(#[from] ParseGridError),
 
@@ -40,10 +40,10 @@ impl Grid<char> {
     }
 }
 
-// [FIXME] There doesn't seem to be a simple (read: not-`unsafe`) way to allocate **exactly** the right amount of bytes;
-// for creating new boxed slices. Vec::with_capacity is allowed to allocate more than asked to, if the compiler/OS
-// decides to. Might be worth looking into eventually, maybe once `std::alloc::Allocator` gets stabilized and is easier
-// to work with.
+// [FIXME] There doesn't seem to be a simple (read: non-unsafe) way to allocate **exactly** the right amount of bytes
+// for creating new boxed slices. Vec::with_capacity is allowed to allocate extra space if the compiler/OS decides to,
+// which would result in a reallocation when converting to a boxed slice. Might be worth looking into eventually, maybe
+// once `std::alloc::Allocator` gets stabilized and is easier to work with.
 
 impl<T: Clone> Grid<T> {
     /// Creates a new grid by filling it with clones of an element.
@@ -85,23 +85,28 @@ impl<T: Default> Grid<T> {
 }
 
 impl<T> Grid<T> {
+    /// Returns the width of this grid.
     pub const fn width(&self) -> usize {
         self.w
     }
 
+    /// Returns the height of this grid.
     pub const fn height(&self) -> usize {
         self.h
     }
 
+    /// Returns both the width and height of this grid, as a tuple.
     pub const fn size(&self) -> (usize, usize) {
         (self.w, self.h)
     }
 
+    /// Checks whether or not the given position is within the bounds of this grid's size.
     pub fn contains<Idx: GridIndex>(&self, pos: Idx) -> bool {
         let (x, y) = pos.as_tuple();
         x < self.w && y < self.h
     }
 
+    /// Gets a reference to the item at the given position in this grid. Returns `None` if `pos` is out of bounds.
     pub fn get<Idx: GridIndex>(&self, pos: Idx) -> Option<&T> {
         let (x, y) = pos.as_tuple();
         if self.contains((x, y)) {
@@ -112,6 +117,8 @@ impl<T> Grid<T> {
         }
     }
 
+    /// Gets a mutable reference to the item at the given position in this grid. Returns `None` if `pos` is out of
+    /// bounds.
     pub fn get_mut<Idx: GridIndex>(&mut self, pos: Idx) -> Option<&mut T> {
         let (x, y) = pos.as_tuple();
         if self.contains((x, y)) {
@@ -122,18 +129,20 @@ impl<T> Grid<T> {
         }
     }
 
+    /// Gets a reference to the item at the given position in this grid, without first performing a bounds check.
     pub unsafe fn get_unchecked<Idx: GridIndex>(&self, pos: Idx) -> &T {
         let idx = pos.index1d(self.width());
         self.buf.get_unchecked(idx)
     }
 
+    /// Gets a mutable reference to the item at the given position in this grid, without first performing a bounds
+    /// check.
     pub unsafe fn get_unchecked_mut<Idx: GridIndex>(&mut self, pos: Idx) -> &mut T {
         let idx = pos.index1d(self.width());
         self.buf.get_unchecked_mut(idx)
     }
 
-    /// Creates a new grid of the given size, filled with the result of calling `func` once for every (x, y) position of
-    /// the grid.
+    /// Creates a new grid of the given size by calling `func` once for every (x, y) position of the grid.
     pub fn from_fn<F>(w: usize, h: usize, mut func: F) -> Self
     where
         F: FnMut((usize, usize)) -> T,
@@ -168,7 +177,9 @@ impl<T> Grid<T> {
         }
     }
 
-    /// Creates a new grid by attempting to call the provided
+    /// Creates a new grid by attempting to call the provided mapping function on each character of the source input.
+    ///
+    /// The mapping function is passed both the source character and the (x, y) position at which it appears.
     pub fn try_from_lines_map<E, I, S, F>(lines: I, mut map_fn: F) -> Result<Self, TryParseGridError<E>>
     where
         I: IntoIterator<Item = S>,
@@ -203,22 +214,6 @@ impl<T> Grid<T> {
 
         let buf = buf.into_boxed_slice();
         Ok(Grid { w, h, buf })
-    }
-}
-
-impl<T, I: GridIndex> Index<I> for Grid<T> {
-    type Output = T;
-
-    fn index(&self, index: I) -> &Self::Output {
-        let i = index.index1d(self.width());
-        &self.buf[i]
-    }
-}
-
-impl<T, I: GridIndex> IndexMut<I> for Grid<T> {
-    fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        let i = index.index1d(self.width());
-        &mut self.buf[i]
     }
 }
 
@@ -260,9 +255,30 @@ pub trait GridIndex {
         (self.x(), self.y())
     }
 
+    /// Normalizes this index as an array to make it easier to destructure the `x` and `y` components.
+    fn as_array(&self) -> [usize; 2] {
+        [self.x(), self.y()]
+    }
+
     /// Given a grid-width, converts this [GridIndex] into a single one-dimensional buffer offset.
     fn index1d(&self, w: usize) -> usize {
         self.y() * w + self.x()
+    }
+}
+
+impl<T, I: GridIndex> Index<I> for Grid<T> {
+    type Output = T;
+
+    fn index(&self, index: I) -> &Self::Output {
+        let i = index.index1d(self.width());
+        &self.buf[i]
+    }
+}
+
+impl<T, I: GridIndex> IndexMut<I> for Grid<T> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        let i = index.index1d(self.width());
+        &mut self.buf[i]
     }
 }
 
