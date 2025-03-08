@@ -132,14 +132,14 @@ impl<T> Grid<T> {
     /// Gets a reference to the item at the given position in this grid, without first performing a bounds check.
     pub unsafe fn get_unchecked<Idx: GridIndex>(&self, pos: Idx) -> &T {
         let idx = pos.index1d(self.width());
-        self.buf.get_unchecked(idx)
+        unsafe { self.buf.get_unchecked(idx) }
     }
 
     /// Gets a mutable reference to the item at the given position in this grid, without first performing a bounds
     /// check.
     pub unsafe fn get_unchecked_mut<Idx: GridIndex>(&mut self, pos: Idx) -> &mut T {
         let idx = pos.index1d(self.width());
-        self.buf.get_unchecked_mut(idx)
+        unsafe { self.buf.get_unchecked_mut(idx) }
     }
 
     /// Creates a new grid of the given size by calling `func` once for every (x, y) position of the grid.
