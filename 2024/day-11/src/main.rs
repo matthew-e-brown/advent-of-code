@@ -1,3 +1,7 @@
+use std::collections::BTreeMap;
+
+const MAX_BLINK: usize = 75;
+
 fn main() {
     let input = aoc_utils::puzzle_input();
 
@@ -5,64 +9,39 @@ fn main() {
         .split_whitespace()
         .map(|n| n.parse::<u64>().expect("puzzle input should contain valid numbers"));
 
-    let mut buff1 = Vec::new();
-    let mut buff2 = Vec::new();
+    // Because every stone changes and splits entirely independently of all the other stones around it, the order of the
+    // stones is actually completely irrelevant. It's a red-herring in the instructions. So, instead of actually storing
+    // the stones, we can simply store _how many_ of each stone there is; even if we have thousands of the same number
+    // line, we only need 2×8 bytes, instead of the thousands of bytes it would've taken before (when we were using a
+    // Vec to simulate the line, for part 1).
+    let mut list1 = stones.map(|stone| (stone, 1)).collect::<BTreeMap<u64, u64>>();
+    let mut list2 = BTreeMap::new();
 
-    let mut total_25 = 0;
-    let mut total_75 = 0;
-    for stone in stones {
-        let [s25, s75] = process_stone(stone, [25, 75], (&mut buff1, &mut buff2));
-        total_25 += s25;
-        total_75 += s75;
-    }
+    let mut src_list = &mut list1;
+    let mut dst_list = &mut list2;
 
-    println!("Number of stones after blinking 25 times (part 1): {}", total_25);
-    println!("Number of stones after blinking 75 times (part 2): {}", total_75);
-}
+    let mut stone_counts = [0; MAX_BLINK];
+    for blink in 0..MAX_BLINK {
+        dst_list.clear();
 
-/// Takes a single stone and watches what happens when it is blinked at a certain number of times.
-///
-/// `checks` is an array of blink-counts at which to "check in." For each value in this array, the stones are tallied;
-/// the result of each count is returned in an array of the same length. `checks` **must** be in ascending order.
-///
-/// Buffers are borrowed from outside to avoid reallocating new buffers for each successive stone.
-fn process_stone<const N: usize>(stone: u64, checks: [u32; N], buffers: (&mut Vec<u64>, &mut Vec<u64>)) -> [usize; N] {
-    assert!(checks.is_sorted(), "checks should be in order");
-
-    let mut r = 0;
-    let mut results = [0; N];
-    let Some(&max) = checks.last() else {
-        return [0; N]; // Only possible when N == 0.
-    };
-
-    let (mut src_buff, mut dst_buff) = buffers;
-    src_buff.clear();
-    dst_buff.clear();
-    src_buff.push(stone);
-
-    for blink in 1..=max {
-        dst_buff.clear();
-
-        for &stone in src_buff.iter() {
+        for (&stone, &count) in src_list.iter() {
             if stone == 0 {
-                dst_buff.push(1);
+                *(dst_list.entry(1).or_insert(0)) += count;
             } else if let Some([l, r]) = split_digits(stone) {
-                dst_buff.push(l);
-                dst_buff.push(r);
+                *(dst_list.entry(l).or_insert(0)) += count;
+                *(dst_list.entry(r).or_insert(0)) += count;
             } else {
-                dst_buff.push(stone * 2024);
+                *(dst_list.entry(stone * 2024).or_insert(0)) += count;
             }
         }
 
-        if blink == checks[r] {
-            results[r] = dst_buff.len();
-            r += 1;
-        }
-
-        std::mem::swap(&mut src_buff, &mut dst_buff);
+        stone_counts[blink] = dst_list.iter().fold(0, |acc, (_, &count)| acc + count);
+        std::mem::swap(&mut src_list, &mut dst_list);
     }
 
-    results
+    println!("Stone counts over time: {stone_counts:?}\n");
+    println!("Number of stones after blinking 25 times (part 1): {}", stone_counts[25 - 1]);
+    println!("Number of stones after blinking 75 times (part 2): {}", stone_counts[75 - 1]);
 }
 
 fn split_digits(n: u64) -> Option<[u64; 2]> {
