@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::collections::BTreeSet;
 use std::sync::mpsc;
 
@@ -71,8 +70,10 @@ fn scan_trailhead(map: &Grid<u32>, start_pos: Position) -> (usize, usize) {
             // from their position will have a zero sum. NB: we don't bother with an "explored" queue here, since we
             // always want to fully explore all paths; otherwise, we don't know how many unique trails they may
             // contribute.
-            find_surrounding(map, pos, val + 1)
-                .map(|neighbour| dfs(map, neighbour, found))
+            map.neighbours(pos)
+                .unwrap()
+                .iter_adjacent()
+                .filter_map(|p| (map[p] == val + 1).then(|| dfs(map, p, found)))
                 .sum()
         }
     }
@@ -81,28 +82,4 @@ fn scan_trailhead(map: &Grid<u32>, start_pos: Position) -> (usize, usize) {
     let rating = dfs(map, start_pos, &mut found);
     let score = found.len();
     (score, rating)
-}
-
-/// Returns an iterator over all positions around a given position `pos`, accounting for the boundaries of the given
-/// grid.
-fn surrounding<T>(grid: &Grid<T>, pos: Position) -> impl Iterator<Item = Position> {
-    let (x, y) = pos;
-    let (w, h) = grid.size();
-    [
-        (x > 0).then(|| (x - 1, y)),
-        (y > 0).then(|| (x, y - 1)),
-        (x < w - 1).then(|| (x + 1, y)),
-        (y < h - 1).then(|| (x, y + 1)),
-    ]
-    .into_iter()
-    .filter_map(|x| x)
-}
-
-/// Filters the result of [`surrounding`] to just those that equal the given value.
-fn find_surrounding<'a, 'b, T: Eq, B: Borrow<T>>(
-    grid: &'a Grid<T>,
-    pos: Position,
-    val: B,
-) -> impl Iterator<Item = Position> + use<'a, 'b, T, B> {
-    surrounding(grid, pos).filter(move |x| &grid[x] == val.borrow())
 }
