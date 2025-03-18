@@ -149,15 +149,15 @@ impl<T> Grid<T> {
         if self.contains((x, y)) { Some(Neighbours::new(pos, w, h)) } else { None }
     }
 
-    /// Creates a new grid of the given size by calling `func` once for every (x, y) position of the grid.
-    pub fn from_fn<F>(w: usize, h: usize, mut func: F) -> Self
+    /// Creates a new grid of the given size by calling `f` once for every (x, y) position of the grid.
+    pub fn from_fn<F>(w: usize, h: usize, mut f: F) -> Self
     where
         F: FnMut((usize, usize)) -> T,
     {
         let mut buf = Vec::with_capacity(w * h);
         for y in 0..h {
             for x in 0..w {
-                buf.push(func((x, y)));
+                buf.push(f((x, y)));
             }
         }
 
@@ -171,13 +171,13 @@ impl<T> Grid<T> {
     /// Creates a new grid by running each character of the source input through a mapping function.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
-    pub fn from_lines_map<I, S, F>(lines: I, mut map_fn: F) -> Result<Self, ParseGridError>
+    pub fn from_lines_map<I, S, F>(lines: I, mut f: F) -> Result<Self, ParseGridError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
         F: FnMut(char, (usize, usize)) -> T,
     {
-        match Self::try_from_lines_map::<Infallible, I, S, _>(lines, move |x, p| Ok(map_fn(x, p))) {
+        match Self::try_from_lines_map::<Infallible, I, S, _>(lines, move |x, p| Ok(f(x, p))) {
             Ok(grid) => Ok(grid),
             Err(TryParseGridError::GridError(err)) => Err(err),
             Err(TryParseGridError::MapFnError(_)) => unreachable!(), // map_fn never returns Err
@@ -187,7 +187,7 @@ impl<T> Grid<T> {
     /// Creates a new grid by attempting to call the provided mapping function on each character of the source input.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
-    pub fn try_from_lines_map<E, I, S, F>(lines: I, mut map_fn: F) -> Result<Self, TryParseGridError<E>>
+    pub fn try_from_lines_map<E, I, S, F>(lines: I, mut f: F) -> Result<Self, TryParseGridError<E>>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -210,7 +210,7 @@ impl<T> Grid<T> {
             if line.len() == w {
                 buf.reserve(line.len()); // NB: *not* `reserve_exact`
                 for (x, c) in line.chars().enumerate() {
-                    let res = map_fn(c, (x, h)).map_err(TryParseGridError::MapFnError)?;
+                    let res = f(c, (x, h)).map_err(TryParseGridError::MapFnError)?;
                     buf.push(res);
                 }
                 h += 1;
@@ -308,7 +308,11 @@ impl GridIndex for [usize; 2] {
     fn from_xy(x: usize, y: usize) -> Self { [x, y] }
 }
 
-/// A representation of the neighbours around a cell in a grid.
+// =====================================================================================================================
+// =====================================================================================================================
+// =====================================================================================================================
+
+/// A representation of the neighbours around a particular cell in a [Grid].
 ///
 /// This struct is created by the [`neighbours`][Grid::neighbours] method on the [`Grid`] struct.
 #[derive(Debug, Clone, Copy)]
@@ -323,69 +327,80 @@ impl<Idx: GridIndex> Neighbours<Idx> {
     const MASK_S: u8 = 0b0010;
     const MASK_W: u8 = 0b0001;
 
-    fn new(pos: Idx, w: usize, h: usize) -> Self {
+    // Diagonals are simply ANDs of their two composite directions:
+    const MASK_NE: u8 = 0b1100;
+    const MASK_SE: u8 = 0b0110;
+    const MASK_SW: u8 = 0b0011;
+    const MASK_NW: u8 = 0b1001;
+
+    const OFFSET_N: u8 = 3;
+    const OFFSET_E: u8 = 2;
+    const OFFSET_S: u8 = 1;
+    const OFFSET_W: u8 = 0;
+
+    pub(self) fn new(pos: Idx, w: usize, h: usize) -> Self {
         let (x, y) = pos.to_tuple();
 
         let n = (y > 0) as u8;
         let e = (x < w - 1) as u8;
         let s = (y < h - 1) as u8;
         let w = (x > 0) as u8;
-        let mask = (n << 3) | (e << 2) | (s << 1) | (w << 0);
+        let mask = (n << Self::OFFSET_N) | (e << Self::OFFSET_E) | (s << Self::OFFSET_S) | (w << Self::OFFSET_W);
 
         Neighbours { pos, mask }
     }
 
-    /// Returns the position in the middle of the adjacent indices.
+    /// Returns the position of the cell.
     pub fn pos(&self) -> Idx {
         self.pos
     }
 
-    /// Returns the position north of the original position (up), assuming it is in-bounds.
+    /// Returns the position north of the cell (up), assuming it is in-bounds.
     pub fn n(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
         (self.mask & Self::MASK_N > 0).then(|| Idx::from_xy(x, y - 1))
     }
 
-    /// Returns the position east of the original position (to the right), assuming it is in-bounds.
+    /// Returns the position east of the cell (to the right), assuming it is in-bounds.
     pub fn e(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
         (self.mask & Self::MASK_E > 0).then(|| Idx::from_xy(x + 1, y))
     }
 
-    /// Returns the position south of the original position (down), assuming it is in-bounds.
+    /// Returns the position south of the cell (down), assuming it is in-bounds.
     pub fn s(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
         (self.mask & Self::MASK_S > 0).then(|| Idx::from_xy(x, y + 1))
     }
 
-    /// Returns the position west of the original position (to the left), assuming it is in-bounds.
+    /// Returns the position west of the cell (to the left), assuming it is in-bounds.
     pub fn w(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
         (self.mask & Self::MASK_W > 0).then(|| Idx::from_xy(x - 1, y))
     }
 
-    /// Returns the position north-east of the original position (up and to the right), assuming it is in-bounds.
+    /// Returns the position north-east of the cell (up and to the right), assuming it is in-bounds.
     pub fn ne(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & (Self::MASK_W | Self::MASK_E) > 0).then(|| Idx::from_xy(x + 1, y - 1))
+        (self.mask & Self::MASK_NE > 0).then(|| Idx::from_xy(x + 1, y - 1))
     }
 
-    /// Returns the position south-east of the original position (down and to the right), assuming it is in-bounds.
+    /// Returns the position south-east of the cell (down and to the right), assuming it is in-bounds.
     pub fn se(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & (Self::MASK_S | Self::MASK_E) > 0).then(|| Idx::from_xy(x + 1, y + 1))
+        (self.mask & Self::MASK_SE > 0).then(|| Idx::from_xy(x + 1, y + 1))
     }
 
-    /// Returns the position south-west of the original position (), assuming it is in-bounds.
+    /// Returns the position south-west of the cell (down and to the left), assuming it is in-bounds.
     pub fn sw(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & (Self::MASK_S | Self::MASK_W) > 0).then(|| Idx::from_xy(x - 1, y + 1))
+        (self.mask & Self::MASK_SW > 0).then(|| Idx::from_xy(x - 1, y + 1))
     }
 
-    /// Returns the position north-west of the original position (...), assuming it is in-bounds.
+    /// Returns the position north-west of the cell (up and to the left), assuming it is in-bounds.
     pub fn nw(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & (Self::MASK_N | Self::MASK_W) > 0).then(|| Idx::from_xy(x - 1, y - 1))
+        (self.mask & Self::MASK_NW > 0).then(|| Idx::from_xy(x - 1, y - 1))
     }
 
     /// Returns an iterator over the positions of the four adjacent positions around the cell. Any out-of-bounds
@@ -394,16 +409,40 @@ impl<Idx: GridIndex> Neighbours<Idx> {
         iter::IterAdjacent(iter::InnerIter::new(*self))
     }
 
+    /// Returns an iterator over the positions of all eight positions that surround the cell. Any out-of-bounds corners
+    /// are excluded from iteration.
+    pub fn iter_around(&self) -> iter::IterAround<Idx> {
+        iter::IterAround(iter::InnerIter::new(*self))
+    }
+
     /// Returns an iterator over the positions of the four corners around the cell. Any out-of-bounds corners are
     /// excluded from iteration.
     pub fn iter_corners(&self) -> iter::IterCorners<Idx> {
         iter::IterCorners(iter::InnerIter::new(*self))
     }
 
-    /// Returns an iterator over the positions of all eight positions that surround the cell. Any out-of-bounds corners
-    /// are excluded from iteration.
-    pub fn iter_around(&self) -> iter::IterAround<Idx> {
-        iter::IterAround(iter::InnerIter::new(*self))
+    /// Returns the number of cells adjacent to this one (excluding diagonals) which have a valid neighbour (i.e., those
+    /// that are within the bounds of the [Grid]).
+    pub fn num_adjacent(&self) -> u8 {
+        (self.mask & Self::MASK_N > 0) as u8
+            + (self.mask & Self::MASK_E > 0) as u8
+            + (self.mask & Self::MASK_S > 0) as u8
+            + (self.mask & Self::MASK_W > 0) as u8
+    }
+
+    /// Returns the number of cells diagonally adjacent to this one (excluding N, E, S, W) which have a valid neighbour
+    /// (i.e., those that are within the bounds of the [Grid]).
+    pub fn num_corners(&self) -> u8 {
+        (self.mask & Self::MASK_NE > 0) as u8
+            + (self.mask & Self::MASK_SE > 0) as u8
+            + (self.mask & Self::MASK_SW > 0) as u8
+            + (self.mask & Self::MASK_NW > 0) as u8
+    }
+
+    /// Returns the number of cells around this one (including diagonals) which have a valid neighbour (i.e., those that
+    /// are within the bounds of the [Grid]).
+    pub fn num_around(&self) -> u8 {
+        self.num_adjacent() + self.num_corners()
     }
 }
 
@@ -415,29 +454,24 @@ pub mod iter {
     /// An iterator over the four adjacent neighbours of a cell in a [Grid][super::Grid].
     ///
     /// This struct is created by the [`iter_adjacent`][Neighbours::iter_adjacent] method on the [`Neighbours`] struct.
+    #[derive(Debug, Clone, Copy)]
     pub struct IterAdjacent<Idx: GridIndex>(pub(super) InnerIter<Idx, AdjacentOrder>);
-
-    /// An iterator over the four corner-neighbours of a cell in a [Grid][super::Grid].
-    ///
-    /// This struct is created by the [`iter_corners`][Neighbours::iter_corners] method on the [`Neighbours`] struct.
-    pub struct IterCorners<Idx: GridIndex>(pub(super) InnerIter<Idx, CornerOrder>);
 
     /// An iterator over the eight surrounding neighbours of a cell in a [Grid][super::Grid].
     ///
     /// This struct is created by the [`iter_around`][Neighbours::iter_around] method on the [`Neighbours`] struct.
+    #[derive(Debug, Clone, Copy)]
     pub struct IterAround<Idx: GridIndex>(pub(super) InnerIter<Idx, AroundOrder>);
 
-    // ------------------------------------------------------------------------
+    /// An iterator over the four corner-neighbours of a cell in a [Grid][super::Grid].
+    ///
+    /// This struct is created by the [`iter_corners`][Neighbours::iter_corners] method on the [`Neighbours`] struct.
+    #[derive(Debug, Clone, Copy)]
+    pub struct IterCorners<Idx: GridIndex>(pub(super) InnerIter<Idx, CornerOrder>);
+
+    // -----------------------------------------------------------------------------------------------------------------
 
     impl<Idx: GridIndex> Iterator for IterAdjacent<Idx> {
-        type Item = Idx;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.0.next()
-        }
-    }
-
-    impl<Idx: GridIndex> Iterator for IterCorners<Idx> {
         type Item = Idx;
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -453,39 +487,54 @@ pub mod iter {
         }
     }
 
-    // ------------------------------------------------------------------------
+    impl<Idx: GridIndex> Iterator for IterCorners<Idx> {
+        type Item = Idx;
 
-    pub(super) trait Order<Idx: GridIndex> {
-        const MAX: u8;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.next()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// Trait used to control the order in which an [`InnerIter`] yields its elements.
+    pub(super) trait Ordering<Idx: GridIndex> {
+        /// The total number of directions yielded by this ordering.
+        const COUNT: u8;
+
+        /// Retrieves the `i`th neighbour in sequence from the given [`Neighbours`], according to this particular
+        /// ordering.
         fn get(neighbours: &Neighbours<Idx>, i: u8) -> Option<Idx>;
     }
 
-    #[derive(Debug, Clone)]
-    pub(super) struct InnerIter<Idx: GridIndex, O: Order<Idx>> {
+    /// The implementation behind the iterators for [`Neighbours`]. This struct is parameterized over ZSTs that
+    /// implement [`Ordering`] to allow for multiple different orderings to reuse the same [`Iterator`] implementation.
+    #[derive(Debug, Clone, Copy)]
+    pub(super) struct InnerIter<Idx: GridIndex, O: Ordering<Idx>> {
         neighbours: Neighbours<Idx>,
-        current: u8,
+        index: u8,
         order: PhantomData<O>,
     }
 
-    impl<Idx: GridIndex, O: Order<Idx>> InnerIter<Idx, O> {
+    impl<Idx: GridIndex, O: Ordering<Idx>> InnerIter<Idx, O> {
         pub fn new(neighbours: Neighbours<Idx>) -> Self {
             Self {
                 neighbours,
-                current: 0,
+                index: 0,
                 order: PhantomData,
             }
         }
     }
 
-    impl<Idx: GridIndex, O: Order<Idx>> Iterator for InnerIter<Idx, O> {
+    impl<Idx: GridIndex, O: Ordering<Idx>> Iterator for InnerIter<Idx, O> {
         type Item = Idx;
 
         fn next(&mut self) -> Option<Self::Item> {
-            while self.current < O::MAX {
-                let next = O::get(&self.neighbours, self.current);
-                self.current += 1;
-                if next.is_some() {
-                    return next;
+            while self.index < O::COUNT {
+                let value = O::get(&self.neighbours, self.index);
+                self.index += 1;
+                if value.is_some() {
+                    return value;
                 }
             }
 
@@ -493,12 +542,22 @@ pub mod iter {
         }
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// An [Ordering] that yields the four N, E, S, W neighbours, in that order.
+    #[derive(Debug, Clone, Copy)]
     pub(super) struct AdjacentOrder;
-    pub(super) struct CornerOrder;
+
+    /// An [Ordering] that yields all eight surrounding neighbours, in N, NE, E, SE, S, SW, W, NW order.
+    #[derive(Debug, Clone, Copy)]
     pub(super) struct AroundOrder;
 
-    impl<Idx: GridIndex> Order<Idx> for AdjacentOrder {
-        const MAX: u8 = 4;
+    /// An [Ordering] that yields diagonally-adjacent neighbours, in NE, SE, SW, NW order.
+    #[derive(Debug, Clone, Copy)]
+    pub(super) struct CornerOrder;
+
+    impl<Idx: GridIndex> Ordering<Idx> for AdjacentOrder {
+        const COUNT: u8 = 4;
 
         fn get(neighbours: &Neighbours<Idx>, i: u8) -> Option<Idx> {
             match i {
@@ -511,8 +570,8 @@ pub mod iter {
         }
     }
 
-    impl<Idx: GridIndex> Order<Idx> for CornerOrder {
-        const MAX: u8 = 4;
+    impl<Idx: GridIndex> Ordering<Idx> for CornerOrder {
+        const COUNT: u8 = 4;
 
         fn get(neighbours: &Neighbours<Idx>, i: u8) -> Option<Idx> {
             match i {
@@ -525,8 +584,8 @@ pub mod iter {
         }
     }
 
-    impl<Idx: GridIndex> Order<Idx> for AroundOrder {
-        const MAX: u8 = 8;
+    impl<Idx: GridIndex> Ordering<Idx> for AroundOrder {
+        const COUNT: u8 = 8;
 
         fn get(neighbours: &Neighbours<Idx>, i: u8) -> Option<Idx> {
             match i {
