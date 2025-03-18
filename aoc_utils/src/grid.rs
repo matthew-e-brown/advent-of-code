@@ -372,49 +372,49 @@ impl<Idx: GridIndex> Neighbours<Idx> {
     /// Returns the position north of the cell (up), assuming it is in-bounds.
     pub fn n(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_N > 0).then(|| Idx::from_xy(x, y - 1))
+        (self.mask & Self::MASK_N == Self::MASK_N).then(|| Idx::from_xy(x, y - 1))
     }
 
     /// Returns the position east of the cell (to the right), assuming it is in-bounds.
     pub fn e(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_E > 0).then(|| Idx::from_xy(x + 1, y))
+        (self.mask & Self::MASK_E == Self::MASK_E).then(|| Idx::from_xy(x + 1, y))
     }
 
     /// Returns the position south of the cell (down), assuming it is in-bounds.
     pub fn s(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_S > 0).then(|| Idx::from_xy(x, y + 1))
+        (self.mask & Self::MASK_S == Self::MASK_S).then(|| Idx::from_xy(x, y + 1))
     }
 
     /// Returns the position west of the cell (to the left), assuming it is in-bounds.
     pub fn w(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_W > 0).then(|| Idx::from_xy(x - 1, y))
+        (self.mask & Self::MASK_W == Self::MASK_W).then(|| Idx::from_xy(x - 1, y))
     }
 
     /// Returns the position north-east of the cell (up and to the right), assuming it is in-bounds.
     pub fn ne(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_NE > 0).then(|| Idx::from_xy(x + 1, y - 1))
+        (self.mask & Self::MASK_NE == Self::MASK_NE).then(|| Idx::from_xy(x + 1, y - 1))
     }
 
     /// Returns the position south-east of the cell (down and to the right), assuming it is in-bounds.
     pub fn se(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_SE > 0).then(|| Idx::from_xy(x + 1, y + 1))
+        (self.mask & Self::MASK_SE == Self::MASK_SE).then(|| Idx::from_xy(x + 1, y + 1))
     }
 
     /// Returns the position south-west of the cell (down and to the left), assuming it is in-bounds.
     pub fn sw(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_SW > 0).then(|| Idx::from_xy(x - 1, y + 1))
+        (self.mask & Self::MASK_SW == Self::MASK_SW).then(|| Idx::from_xy(x - 1, y + 1))
     }
 
     /// Returns the position north-west of the cell (up and to the left), assuming it is in-bounds.
     pub fn nw(&self) -> Option<Idx> {
         let (x, y) = self.pos.to_tuple();
-        (self.mask & Self::MASK_NW > 0).then(|| Idx::from_xy(x - 1, y - 1))
+        (self.mask & Self::MASK_NW == Self::MASK_NW).then(|| Idx::from_xy(x - 1, y - 1))
     }
 
     /// Returns an iterator over the positions of the four adjacent positions around the cell. Any out-of-bounds
