@@ -3,11 +3,15 @@ use aoc_utils::grid::Neighbours;
 
 type Position = (usize, usize);
 
+const DISCOVERED: u8 = 0b01;
+const EXPLORED: u8 = 0b10;
+
 fn main() {
     let map = Grid::from_lines(aoc_utils::puzzle_input().lines()).unwrap();
 
-    let mut discovered = Grid::<bool>::empty(map.width(), map.height());
-    let mut explored = Grid::<bool>::empty(map.width(), map.height());
+    // Use bits 1 and 2 of a single byte to keep track of explored/discovered to avoid needing an entire separate grid
+    // of bools:
+    let mut status_map = Grid::from_elem(map.width(), map.height(), 0u8);
     let mut region_stack = Vec::new();
 
     let mut total_price1 = 0;
@@ -15,13 +19,13 @@ fn main() {
 
     for start_pos in map.positions() {
         // If this cell has already been found by traversing from another cell, skip ahead.
-        if explored[start_pos] {
+        if status_map[start_pos] & EXPLORED == EXPLORED {
             continue;
         }
 
         // Otherwise, this is the start of a new region: start traversing!
         region_stack.push(start_pos);
-        discovered[start_pos] = true;
+        status_map[start_pos] |= DISCOVERED;
 
         let region_char = map[start_pos];
         let mut region_area = 0u32;
@@ -29,7 +33,7 @@ fn main() {
         let mut region_perimeter = 0u32;
 
         while let Some(pos) = region_stack.pop() {
-            explored[pos] = true;
+            status_map[pos] |= EXPLORED;
 
             let neighbours = map.neighbours(pos).unwrap();
 
@@ -39,9 +43,9 @@ fn main() {
             for n_pos in neighbours.iter_adjacent() {
                 if map[n_pos] == region_char {
                     perimeter -= 1;
-                    if !discovered[n_pos] {
+                    if status_map[n_pos] & DISCOVERED != DISCOVERED {
                         region_stack.push(n_pos);
-                        discovered[n_pos] = true;
+                        status_map[n_pos] |= DISCOVERED;
                     }
                 }
             }
