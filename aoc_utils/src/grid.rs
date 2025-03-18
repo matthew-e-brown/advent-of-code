@@ -99,6 +99,11 @@ impl<T> Grid<T> {
         (self.w, self.h)
     }
 
+    /// Returns an iterator over all (x, y) positions in this grid.
+    pub fn positions(&self) -> impl Iterator<Item = (usize, usize)> {
+        (0..self.h).flat_map(|y| (0..self.w).map(move |x| (x, y)))
+    }
+
     /// Checks whether or not the given position is within the bounds of this grid's size.
     pub fn contains<Idx: GridIndex>(&self, pos: Idx) -> bool {
         let (x, y) = pos.to_tuple();
