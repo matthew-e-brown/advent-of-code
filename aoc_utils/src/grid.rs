@@ -222,6 +222,15 @@ impl<T> Grid<T> {
         let buf = buf.into_boxed_slice();
         Ok(Grid { w, h, buf })
     }
+
+    /// Creates a new [Grid] with the same size as this one by applying a mapping function to each element.
+    pub fn map<B, F>(&self, f: F) -> Grid<B>
+    where
+        F: FnMut(&T) -> B,
+    {
+        let buf = self.buf.iter().map(f).collect::<Box<[B]>>();
+        Grid { buf, w: self.w, h: self.h }
+    }
 }
 
 impl<T> Debug for Grid<T>
