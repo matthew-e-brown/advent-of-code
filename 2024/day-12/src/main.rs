@@ -1,89 +1,93 @@
-use std::collections::BTreeMap;
-use std::num::NonZeroU32;
-
 use aoc_utils::Grid;
+use aoc_utils::grid::Neighbours;
 
 type Position = (usize, usize);
 
-#[derive(Debug, Clone)]
-struct Region {
-    pub char: char,
-    #[allow(unused)]
-    pub id: NonZeroU32,
-    pub first_pos: Position,
-    pub total_area: usize,
-    pub total_perimeter: usize,
-}
-
 fn main() {
-    let input = Grid::from_lines(aoc_utils::puzzle_input().lines()).unwrap();
+    let map = Grid::from_lines(aoc_utils::puzzle_input().lines()).unwrap();
 
-    let mut next_id = 1;
-
-    // We don't even really need to store region info, since we compute area and perimeter one whole region at a time.
-    // But I suspect that I may need it for part 2, so I'll keep it for now.
-    let mut region_data = BTreeMap::<NonZeroU32, Region>::new();
-
-    // Map that denotes which region each element is apart of.
-    let mut region_map = Grid::<Option<NonZeroU32>>::empty(input.width(), input.height());
-    let mut discovered = Grid::<bool>::empty(input.width(), input.height());
+    let mut discovered = Grid::<bool>::empty(map.width(), map.height());
+    let mut explored = Grid::<bool>::empty(map.width(), map.height());
     let mut region_stack = Vec::new();
 
-    for pos in input.positions() {
+    let mut total_price1 = 0;
+    let mut total_price2 = 0;
+
+    for start_pos in map.positions() {
         // If this cell has already been found by traversing from another cell, skip ahead.
-        if region_map[pos].is_some() {
+        if explored[start_pos] {
             continue;
         }
 
-        // Otherwise, this is the start of a new region! Start traversing.
-        let char = input[pos];
-        let region_id = NonZeroU32::new(next_id).unwrap();
-        let region = region_data.entry(region_id).or_insert(Region {
-            char,
-            id: region_id,
-            first_pos: pos,
-            total_area: 0,
-            total_perimeter: 0,
-        });
+        // Otherwise, this is the start of a new region: start traversing!
+        region_stack.push(start_pos);
+        discovered[start_pos] = true;
 
-        next_id += 1;
+        let region_char = map[start_pos];
+        let mut region_area = 0u32;
+        let mut region_edges = 0u32;
+        let mut region_perimeter = 0u32;
 
-        region_stack.push(pos);
-        discovered[pos] = true;
         while let Some(pos) = region_stack.pop() {
-            let neighbours = input.neighbours(pos).unwrap().iter_adjacent().filter(|&p| input[p] == char);
+            explored[pos] = true;
+
+            let neighbours = map.neighbours(pos).unwrap();
+
+            // Each cell's contribution to the total perimeter of the region is its number of non-same cells. Start at 4
+            // and count down whenever we see a same-character cell.
             let mut perimeter = 4;
-            for n_pos in neighbours {
-                perimeter -= 1;
-                if !discovered[n_pos] {
-                    region_stack.push(n_pos);
-                    discovered[n_pos] = true;
+            for n_pos in neighbours.iter_adjacent() {
+                if map[n_pos] == region_char {
+                    perimeter -= 1;
+                    if !discovered[n_pos] {
+                        region_stack.push(n_pos);
+                        discovered[n_pos] = true;
+                    }
                 }
             }
 
-            region_map[pos] = Some(region_id);
-            region.total_area += 1;
-            region.total_perimeter += perimeter;
+            region_area += 1;
+            region_edges += count_corners(&map, &neighbours) as u32;
+            region_perimeter += perimeter;
         }
+
+        total_price1 += region_area * region_perimeter;
+        total_price2 += region_area * region_edges;
     }
 
-    // Unwrap all the `Option<NonZeroU32>` to regular u32:
-    let region_map = region_map.map(|n| n.map(|n| n.get()).unwrap_or_default());
+    println!("Total price of all regions (part 1): {}", total_price1);
+    println!("Total price of all regions (part 2): {}", total_price2);
+}
 
-    println!("Number of regions found: {}", region_data.len());
-    println!("{:#3?}\n", region_map);
+/// Counts the corners that a given cell has.
+fn count_corners(map: &Grid<char>, neighbours: &Neighbours<Position>) -> u8 {
+    let char = map[neighbours.pos()];
 
-    let mut total_price = 0;
-    for (&id, region) in region_data.iter() {
-        let price = region.total_area * region.total_perimeter;
-
-        println!(
-            "Region {id} with char {}, found starting at position {:?} has total price {} * {} = {}",
-            region.char, region.first_pos, region.total_area, region.total_perimeter, price,
-        );
-
-        total_price += price;
+    macro_rules! check_match {
+        ($dir:ident) => {
+            neighbours.$dir().is_some_and(|p| map[p] == char)
+        };
     }
 
-    println!("\nTotal price of all regions (part 1): {}", total_price);
+    macro_rules! count_bools {
+        ($bool:expr) => ($bool as u8);
+        ($bool:expr, $($others:expr),+) => ($bool as u8 + count_bools!($($others),+));
+    }
+
+    // There's almost certainly a more elegant way to do this, but we can also just brute-force all combinations.
+    // - Outside corners: two sides, 45-degrees apart, are *not* the same char.
+    // - Inside corners: two sides, 45-degrees apart, *are* the same as this char, but the one between them is not.
+    let n = check_match!(n);
+    let e = check_match!(e);
+    let s = check_match!(s);
+    let w = check_match!(w);
+    let ne = check_match!(ne);
+    let se = check_match!(se);
+    let sw = check_match!(sw);
+    let nw = check_match!(nw);
+
+    let outside = count_bools!(!n && !e, !e && !s, !s && !w, !w && !n);
+    let inside = count_bools!(n && e && !ne, s && e && !se, s && w && !sw, n && w && !nw);
+
+    outside + inside
 }
