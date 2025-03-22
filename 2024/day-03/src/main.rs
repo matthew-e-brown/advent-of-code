@@ -1,4 +1,4 @@
-use regex::Regex;
+use aoc_utils::regex::Regex;
 
 fn main() {
     let input = aoc_utils::puzzle_input();

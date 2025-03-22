@@ -66,6 +66,7 @@ version = "0.1.0"
 dependencies = [
  "arrayvec",
  "clap",
+ "regex",
  "scoped_threadpool",
  "thiserror",
 ]
@@ -141,7 +142,6 @@ name = "day-03"
 version = "0.1.0"
 dependencies = [
  "aoc_utils",
- "regex",
 ]
 
 [[package]]
@@ -212,7 +212,6 @@ name = "day-13"
 version = "0.1.0"
 dependencies = [
  "aoc_utils",
- "regex",
 ]
 
 [[package]]

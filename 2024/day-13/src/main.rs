@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign, Mul, MulAssign, SubAssign};
 
+use aoc_utils::regex::Regex;
 use day_13::Rational;
-use regex::Regex;
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -86,8 +86,14 @@ pub struct System {
 impl System {
     pub fn into_big(&self) -> System {
         System {
-            x: Row { p: self.x.p + 10000000000000, ..self.x },
-            y: Row { p: self.y.p + 10000000000000, ..self.y },
+            x: Row {
+                p: self.x.p + 10000000000000,
+                ..self.x
+            },
+            y: Row {
+                p: self.y.p + 10000000000000,
+                ..self.y
+            },
         }
     }
 }

@@ -5,9 +5,8 @@ pub mod grid;
 use std::fs;
 use std::path::PathBuf;
 
-pub use arrayvec;
 use clap::{Parser, ValueHint};
-pub use scoped_threadpool;
+pub use {arrayvec, regex, scoped_threadpool};
 
 pub use self::grid::Grid;
 
