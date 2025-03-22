@@ -4,30 +4,30 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 /// A rational number (a fraction).
 #[derive(Clone, Copy)]
 pub struct Rational {
-    n: i32,
-    d: i32,
+    n: i64,
+    d: i64,
 }
 
 impl Rational {
     /// Gets the numerator of this [Rational] number.
-    pub fn n(&self) -> i32 {
+    pub fn n(&self) -> i64 {
         self.n
     }
 
     /// Gets the denominator of this [Rational] number.
-    pub fn d(&self) -> i32 {
+    pub fn d(&self) -> i64 {
         self.d
     }
 
     /// Creates a new [Rational] number with a denominator of 1.
-    pub fn int(n: i32) -> Rational {
+    pub fn int(n: i64) -> Rational {
         Rational { n, d: 1 }
     }
 
     /// Creates a new [Rational] number, as long as the denominator is not zero.
     ///
     /// The number is not reduced.
-    pub fn new(mut n: i32, mut d: i32) -> Option<Rational> {
+    pub fn new(mut n: i64, mut d: i64) -> Option<Rational> {
         if d == 0 {
             None
         } else {
@@ -57,7 +57,7 @@ impl Rational {
     }
 
     /// Returns the integer representation of this [Rational] number, if it can be reduced to one.
-    pub fn to_int(self) -> Option<i32> {
+    pub fn to_int(self) -> Option<i64> {
         if let Rational { n, d: 1 } = self.reduced() {
             Some(n)
         } else {
@@ -66,7 +66,7 @@ impl Rational {
     }
 
     /// Cross-multiplies this [Rational] number with another, returning their numerators.
-    fn cross(&self, rhs: &Rational) -> (i32, i32) {
+    fn cross(&self, rhs: &Rational) -> (i64, i64) {
         let a = self.n * rhs.d;
         let b = rhs.n * self.d;
         (a, b)
@@ -113,8 +113,8 @@ impl Debug for Rational {
     }
 }
 
-impl From<i32> for Rational {
-    fn from(value: i32) -> Self {
+impl From<i64> for Rational {
+    fn from(value: i64) -> Self {
         Rational::new(value, 1).unwrap()
     }
 }
@@ -123,7 +123,7 @@ impl From<i32> for Rational {
 ///
 /// Implementation yoinked from
 /// [Wikipedia](https://en.wikipedia.org/w/index.php?title=Binary_GCD_algorithm&oldid=1272402879#Implementation).
-fn gcd(a: i32, b: i32) -> i32 {
+fn gcd(a: i64, b: i64) -> i64 {
     if a == 0 {
         return b;
     } else if b == 0 {
@@ -154,9 +154,9 @@ fn gcd(a: i32, b: i32) -> i32 {
         b >>= b.trailing_zeros();
     };
 
-    // a/b both originally came from i32, and we know that gcd(a, b) must be smaller than a and b. so the gcd must also
-    // fit into an i32.
-    i32::try_from(d).unwrap()
+    // a/b both originally came from i64, and we know that gcd(a, b) must be smaller than a and b. so the gcd must also
+    // fit into an i64.
+    i64::try_from(d).unwrap()
 }
 
 impl PartialEq for Rational {
@@ -218,39 +218,39 @@ impl Div<Rational> for Rational {
     }
 }
 
-impl Add<i32> for Rational {
+impl Add<i64> for Rational {
     type Output = Rational;
 
-    fn add(self, rhs: i32) -> Self::Output {
+    fn add(self, rhs: i64) -> Self::Output {
         Rational::new(self.n + rhs * self.d, self.d).unwrap()
     }
 }
 
-impl Sub<i32> for Rational {
+impl Sub<i64> for Rational {
     type Output = Rational;
 
-    fn sub(self, rhs: i32) -> Self::Output {
+    fn sub(self, rhs: i64) -> Self::Output {
         Rational::new(self.n - rhs * self.d, self.d).unwrap()
     }
 }
 
-impl Mul<i32> for Rational {
+impl Mul<i64> for Rational {
     type Output = Rational;
 
-    fn mul(self, rhs: i32) -> Self::Output {
+    fn mul(self, rhs: i64) -> Self::Output {
         Rational::new(self.n * rhs, self.d).unwrap()
     }
 }
 
-impl Div<i32> for Rational {
+impl Div<i64> for Rational {
     type Output = Rational;
 
-    fn div(self, rhs: i32) -> Self::Output {
+    fn div(self, rhs: i64) -> Self::Output {
         Rational::new(self.n / rhs, self.d).unwrap()
     }
 }
 
-impl Add<Rational> for i32 {
+impl Add<Rational> for i64 {
     type Output = Rational;
 
     fn add(self, rhs: Rational) -> Self::Output {
@@ -258,7 +258,7 @@ impl Add<Rational> for i32 {
     }
 }
 
-impl Sub<Rational> for i32 {
+impl Sub<Rational> for i64 {
     type Output = Rational;
 
     fn sub(self, rhs: Rational) -> Self::Output {
@@ -266,7 +266,7 @@ impl Sub<Rational> for i32 {
     }
 }
 
-impl Mul<Rational> for i32 {
+impl Mul<Rational> for i64 {
     type Output = Rational;
 
     fn mul(self, rhs: Rational) -> Self::Output {
@@ -274,7 +274,7 @@ impl Mul<Rational> for i32 {
     }
 }
 
-impl Div<Rational> for i32 {
+impl Div<Rational> for i64 {
     type Output = Rational;
 
     fn div(self, rhs: Rational) -> Self::Output {

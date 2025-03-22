@@ -10,32 +10,43 @@ fn main() {
 
     let systems = regex.captures_iter(&input).map(|caps| System {
         x: Row {
-            a: caps[1].parse::<i32>().unwrap().into(),
-            b: caps[3].parse::<i32>().unwrap().into(),
-            p: caps[5].parse::<i32>().unwrap().into(),
+            a: caps[1].parse::<i64>().unwrap().into(),
+            b: caps[3].parse::<i64>().unwrap().into(),
+            p: caps[5].parse::<i64>().unwrap().into(),
         },
         y: Row {
-            a: caps[2].parse::<i32>().unwrap().into(),
-            b: caps[4].parse::<i32>().unwrap().into(),
-            p: caps[6].parse::<i32>().unwrap().into(),
+            a: caps[2].parse::<i64>().unwrap().into(),
+            b: caps[4].parse::<i64>().unwrap().into(),
+            p: caps[6].parse::<i64>().unwrap().into(),
         },
     });
 
-    let mut total_tokens = 0;
+    let mut total1 = 0;
+    let mut total2 = 0;
     for (i, mut sys) in systems.enumerate() {
+        let mut big = sys.into_big();
+
         if let Some((a, b)) = solve_system(&mut sys) {
             println!("System #{i} has solution (a = {a}, b = {b})");
-            total_tokens += 3 * a + b;
+            total1 += 3 * a + b;
         } else {
             println!("System #{i} has no solution.");
         }
+
+        if let Some((a, b)) = solve_system(&mut big) {
+            println!("System #{i} (big) has solution (a = {a}, b = {b})");
+            total2 += 3 * a + b;
+        } else {
+            println!("System #{i} (big) has no solution.");
+        }
     }
 
-    println!("\nTotal tokens to win all prizes (part 1): {total_tokens}");
+    println!("\nTotal tokens to win all prizes (part 1): {total1}");
+    println!("Total tokens to win all prizes, 10-trillion away (part 2): {total2}");
 }
 
 /// Finds the solution to the given system.
-pub fn solve_system(sys: &mut System) -> Option<(i32, i32)> {
+pub fn solve_system(sys: &mut System) -> Option<(i64, i64)> {
     // 1. Divide the first row by column 1 to obtain a pivot in the first column
     let pivot = sys.x.a.recip().unwrap();
     sys.x *= pivot;
@@ -70,6 +81,15 @@ pub struct Row {
 pub struct System {
     pub x: Row,
     pub y: Row,
+}
+
+impl System {
+    pub fn into_big(&self) -> System {
+        System {
+            x: Row { p: self.x.p + 10000000000000, ..self.x },
+            y: Row { p: self.y.p + 10000000000000, ..self.y },
+        }
+    }
 }
 
 impl Row {
