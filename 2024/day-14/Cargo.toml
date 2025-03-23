@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 aoc_utils = { version = "*", path = "../../aoc_utils" }
+crossterm = "0.28.1"
