@@ -3,7 +3,21 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, SubAssign};
 use aoc_utils::regex::Regex;
 use day_13::Rational;
 
+macro_rules! println_if {
+    ($cond:expr$(,)?) => {
+        if $cond {
+            println!()
+        }
+    };
+    ($cond:expr, $rest:tt) => {
+        if $cond {
+            println!($rest)
+        }
+    };
+}
+
 fn main() {
+    let verbosity = aoc_utils::verbosity();
     let input = aoc_utils::puzzle_input();
     let regex =
         Regex::new(r"Button A: X\+(\d+), Y\+(\d+)\nButton B: X\+(\d+), Y\+(\d+)\nPrize: X=(\d+), Y=(\d+)").unwrap();
@@ -27,21 +41,22 @@ fn main() {
         let mut big = sys.into_big();
 
         if let Some((a, b)) = solve_system(&mut sys) {
-            println!("System #{i} has solution (a = {a}, b = {b})");
+            println_if!(verbosity >= 1, "System #{i} has solution (a = {a}, b = {b})");
             total1 += 3 * a + b;
         } else {
-            println!("System #{i} has no solution.");
+            println_if!(verbosity >= 1, "System #{i} has no solution.");
         }
 
         if let Some((a, b)) = solve_system(&mut big) {
-            println!("System #{i} (big) has solution (a = {a}, b = {b})");
+            println_if!(verbosity >= 1, "System #{i} (big) has solution (a = {a}, b = {b})");
             total2 += 3 * a + b;
         } else {
-            println!("System #{i} (big) has no solution.");
+            println_if!(verbosity >= 1, "System #{i} (big) has no solution.");
         }
     }
 
-    println!("\nTotal tokens to win all prizes (part 1): {total1}");
+    println_if!(verbosity >= 1);
+    println!("Total tokens to win all prizes (part 1): {total1}");
     println!("Total tokens to win all prizes, 10-trillion away (part 2): {total2}");
 }
 
