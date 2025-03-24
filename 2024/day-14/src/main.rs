@@ -1,402 +1,268 @@
-use std::fmt::{Debug, Display};
-use std::io::{self, Write};
-use std::ops::{Add, AddAssign, Mul, SubAssign};
+mod charsets;
+mod robot;
+
+use std::io::{self, StdoutLock, Write};
+use std::marker::PhantomData;
+use std::ops::ControlFlow;
 use std::process::ExitCode;
-use std::str::FromStr;
 use std::time::Duration;
 
 use aoc_utils::Grid;
-use aoc_utils::grid::GridIndex;
+use crossterm::QueueableCommand;
 use crossterm::cursor::{DisableBlinking, EnableBlinking, Hide as HideCursor, MoveTo, Show as ShowCursor};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 #[cfg(not(windows))]
 use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
-use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor};
+use crossterm::style::{Color, Print, SetBackgroundColor, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::{execute, queue};
 
-const MAP_W: i32 = 101;
-const MAP_H: i32 = 103;
+use self::charsets::CharSet;
+use self::robot::{Robot, Vec2};
 
-const X_MID: i32 = MAP_W / 2;
-const Y_MID: i32 = MAP_H / 2;
-
+pub const MAP_W: usize = 101;
+pub const MAP_H: usize = 103;
 
 fn main() -> ExitCode {
-    let input = aoc_utils::puzzle_input().lines().map(|line| Robot::from_str(line).unwrap());
-    let map = Map::new(MAP_W as usize, MAP_H as usize, input);
+    let robots = aoc_utils::puzzle_input().lines().map(|line| line.parse().unwrap());
 
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, DisableBlinking, HideCursor).unwrap();
-    #[cfg(not(windows))]
-    execute!(PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)).unwrap();
-
-    let result = run(map);
-
-    execute!(stdout, LeaveAlternateScreen, EnableBlinking, ShowCursor).unwrap();
-
-    #[cfg(not(windows))]
-    execute!(PopKeyboardEnhancementFlags).unwrap();
-
-    if let Err(err) = result {
-        eprintln!("{err}");
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
+    // Swap `Braille` for `Quadrants` to use different Unicode characters for rendering.
+    match App::<charsets::Braille>::new(robots).run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("{err}");
+            ExitCode::FAILURE
+        },
     }
 }
 
-fn run(mut map: Map) -> io::Result<()> {
-    let mut stdout = io::stdout();
-    let mut timestamp = 0u32;
-    let mut safety_factor100 = None;
+pub fn setup_terminal() -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    stdout.queue(EnterAlternateScreen)?.queue(DisableBlinking)?.queue(HideCursor)?;
+    #[cfg(not(windows))]
+    // Non-Windows devices need `REPORT_EVENT_TYPES` active to be able to read whether or not a KeyEvent is a
+    // press/release/hold etc. But trying to set the flag on Windows results in a crash.
+    stdout.queue(PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES))?;
+    stdout.flush()
+}
 
-    let mut paused = false;
+pub fn restore_terminal() -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    stdout.queue(LeaveAlternateScreen)?.queue(EnableBlinking)?.queue(ShowCursor)?;
+    #[cfg(not(windows))]
+    stdout.queue(PopKeyboardEnhancementFlags)?;
+    stdout.flush()
+}
 
-    let info_x = MAP_W as u16 + 2;
+struct App<C: CharSet> {
+    robots: Vec<Robot>,
+    counts: Grid<u8>,
+    safety: u32,
+    quad_counts: [u32; 4],
+    non_quad_count: u32,
+    safety100: Option<u32>,
+    timestamp: i32,
+    paused: bool,
+    _marker: PhantomData<C>,
+}
 
-    queue!(stdout, Clear(ClearType::All))?;
-    loop {
-        // Display information from the previous iteration:
-        map.display_robots(&mut stdout)?;
+impl<C: CharSet> App<C> {
+    pub fn new(robots: impl IntoIterator<Item = Robot>) -> Self {
+        let mut counts = Grid::<u8>::empty(MAP_W, MAP_H);
+        let robots = robots.into_iter().inspect(|Robot { pos, .. }| counts[*pos] += 1).collect();
+        App {
+            counts,
+            robots,
+            safety: 0,
+            quad_counts: [0; 4],
+            non_quad_count: 0,
+            safety100: None,
+            timestamp: 0,
+            paused: false,
+            _marker: PhantomData,
+        }
+    }
 
-        let (quadrants, outside) = map.quadrant_counts();
-        let safety_factor = Map::safety_factor(quadrants);
-        if timestamp == 100 && safety_factor100.is_none() {
-            safety_factor100 = Some(safety_factor);
+    pub fn run(mut self) -> io::Result<()> {
+        setup_terminal()?;
+
+        self.draw()?;
+
+        loop {
+            self.recalculate_stats();
+            self.draw()?;
+
+            // Images seem to appear when the "safety factor" is below a certain amount; use this to control how long to
+            // block for when polling for keyboard events, to create a visible delay for interesting patterns.
+            let delay = if self.safety < 200_000_000 {
+                Duration::from_millis(100)
+            } else {
+                Duration::from_millis(0)
+            };
+
+            if let ControlFlow::Break(_) = self.handle_events(delay)? {
+                break;
+            }
+
+            // When it's _really_ low (relatively speaking), there's a high chance that we have found our image. Pause
+            // drawing for now.
+            if self.safety < 100_000_000 {
+                self.paused = true;
+            }
+
+            if !self.paused {
+                self.step_robots(1);
+            }
         }
 
-        queue!(stdout, MoveTo(info_x, 0), Print("Timestamp: "), Print(timestamp), Clear(ClearType::UntilNewLine))?;
-        queue!(
-            stdout,
-            MoveTo(info_x, 1),
-            Print("Safety factor: "),
-            Print(safety_factor),
-            Clear(ClearType::UntilNewLine)
-        )?;
-        if let Some(factor) = &safety_factor100 {
-            queue!(
-                stdout,
-                MoveTo(info_x, 2),
-                Print("Safety factor (100): "),
-                Print(factor),
-                Clear(ClearType::UntilNewLine)
-            )?;
+        restore_terminal()?;
+        Ok(())
+    }
+
+    pub fn step_robots(&mut self, n_steps: i32) {
+        if n_steps == 0 || self.timestamp + n_steps < 0 {
+            return;
         }
 
-        for y in 0..4 {
-            let n = quadrants[y as usize];
-            queue!(
-                stdout,
-                MoveTo(info_x, 4 + y),
-                Print("Number in quadrant #"),
-                Print(y),
-                Print(": "),
-                Print(n),
-                Clear(ClearType::UntilNewLine)
-            )?;
+        self.timestamp += n_steps;
+
+        let limits = self.counts.size().try_into().unwrap();
+        for robot in &mut self.robots {
+            self.counts[robot.pos] -= 1;
+            robot.pos += robot.vel * n_steps;
+            robot.pos.wrapping_clamp(&limits);
+            self.counts[robot.pos] += 1;
         }
-        queue!(
-            stdout,
-            MoveTo(info_x, 9),
-            Print("Number outside a quadrant: "),
-            Print(outside),
-            Clear(ClearType::UntilNewLine)
-        )?;
+    }
 
-        stdout.flush()?;
+    fn recalculate_stats(&mut self) {
+        let (quad_counts, non_quad_count) = quadrant_counts(&self.robots, self.counts.width(), self.counts.height());
 
-        let delay = if safety_factor < 200000000 {
-            100
+        self.quad_counts = quad_counts;
+        self.non_quad_count = non_quad_count;
+        self.safety = quad_counts.into_iter().fold(1, |a, c| a * c);
+
+        if self.timestamp == 100 && self.safety100.is_none() {
+            self.safety100 = Some(self.safety);
+        }
+    }
+
+    pub fn draw(&self) -> io::Result<()> {
+        let mut stdout = io::stdout().lock();
+        self.draw_robots(&mut stdout)?;
+        self.draw_stats(&mut stdout)?;
+        stdout.flush()
+    }
+
+    fn draw_robots(&self, stdout: &mut StdoutLock) -> io::Result<()> {
+        stdout
+            .queue(SetBackgroundColor(Color::Black))?
+            .queue(SetForegroundColor(Color::Green))?;
+
+        // We need to iterate over the grid in chunks of 2 across and 8 down to properly generate braille characters.
+        for (term_y, grid_y) in (0..self.counts.height()).step_by(C::Y_STEP).enumerate() {
+            stdout.queue(MoveTo(0, term_y as u16))?;
+            for grid_x in (0..self.counts.width()).step_by(C::X_STEP) {
+                let c = C::make_char(&self.counts, grid_x, grid_y);
+                stdout.queue(Print(c))?;
+            }
+        }
+
+        stdout
+            .queue(SetBackgroundColor(Color::Reset))?
+            .queue(SetForegroundColor(Color::Reset))?;
+
+        Ok(())
+    }
+
+    fn draw_stats(&self, stdout: &mut StdoutLock) -> io::Result<()> {
+        let x = (self.counts.width() / C::X_STEP + 3) as u16;
+
+        macro_rules! info_line {
+            ($y:expr, $($prints:expr),*) => {
+                stdout
+                .queue(MoveTo(x, $y))?
+                $( .queue(Print($prints))? )*
+                .queue(Clear(ClearType::UntilNewLine))?
+            };
+        }
+
+        info_line!(0, "Timestamp: ", self.timestamp);
+        info_line!(1, "Current safety factor: ", self.safety);
+
+        if let Some(factor100) = &self.safety100 {
+            info_line!(3, "Safety factor at t=100 seconds (part 1): ", factor100);
+        } /* else {
+        info_line!(3, "Safety factor at t=100 seconds (part 1): ", "(not reached yet)");
+        } */
+
+        let [q1, q2, q3, q4] = self.quad_counts;
+        info_line!(5, "Robots in quadrant 1 (TL): ", q1);
+        info_line!(6, "Robots in quadrant 2 (TR): ", q2);
+        info_line!(7, "Robots in quadrant 3 (BL): ", q3);
+        info_line!(8, "Robots in quadrant 4 (BR): ", q4);
+        info_line!(10, "Robots not in any quadrant: ", self.non_quad_count);
+
+        if self.paused {
+            info_line!(12, "Simulation paused ⏸");
         } else {
-            0
-        };
+            info_line!(12, ""); // clear the line
+        }
 
-        if event::poll(Duration::from_millis(delay))? {
-            use Event::Key;
+        Ok(())
+    }
+
+    fn handle_events(&mut self, delay: Duration) -> io::Result<ControlFlow<()>> {
+        // We only want to call `event::read` when we are ready to block; these two cases
+        if self.paused || event::poll(delay)? {
             use KeyEventKind::Press;
-            if let Key(KeyEvent { kind: Press, code, .. }) = event::read()? {
+            if let Event::Key(KeyEvent { code, kind: Press, .. }) = event::read()? {
                 match code {
-                    KeyCode::Char('q') => break,
-                    KeyCode::Char(' ') => paused = !paused,
-                    KeyCode::Right if paused => {
-                        timestamp += 1;
-                        map.step_robots();
-                    },
-                    KeyCode::Left if paused && timestamp > 0 => {
-                        timestamp -= 1;
-                        map.step_robots_back();
-                    },
+                    KeyCode::Char('q') | KeyCode::Esc => return Ok(ControlFlow::Break(())),
+                    KeyCode::Char(' ') => self.paused = !self.paused,
+                    KeyCode::Right if self.paused => self.step_robots(1),
+                    KeyCode::Left if self.paused && self.timestamp > 0 => self.step_robots(-1),
                     _ => {},
                 }
             }
         }
 
-        // Now step the robots forwards:
-        if !paused {
-            timestamp += 1;
-            map.step_robots();
+        Ok(ControlFlow::Continue(()))
+    }
+}
+
+fn quadrant(pos: &Vec2, width: usize, height: usize) -> Option<u8> {
+    let &Vec2 { x, y } = pos;
+    let x_mid = (width / 2) as i32;
+    let y_mid = (height / 2) as i32;
+
+    if x == x_mid || y == y_mid {
+        None
+    } else {
+        // bit 1 for horizontal, bit 2 for vertical
+        // - 00 -> top left
+        // - 01 -> top right
+        // - 10 -> bottom left
+        // - 11 -> bottom right
+        let h = (x < x_mid) as u8;
+        let v = (y < y_mid) as u8;
+        Some(h | (v << 1))
+    }
+}
+
+fn quadrant_counts<'a, I>(robots: I, width: usize, height: usize) -> ([u32; 4], u32)
+where
+    I: IntoIterator<Item = &'a Robot>,
+{
+    let mut quadrants = [0; 4];
+    let mut outside = 0;
+
+    for Robot { pos, .. } in robots {
+        if let Some(i) = quadrant(pos, width, height) {
+            quadrants[i as usize] += 1
+        } else {
+            outside += 1;
         }
     }
 
-    Ok(())
-}
-
-
-fn quadrant(pos: &Vec2) -> Option<usize> {
-    const XM2: i32 = X_MID + 1;
-    const YM2: i32 = Y_MID + 1;
-    #[allow(non_contiguous_range_endpoints)] // We are intentionally excluding the midpoints
-    match pos {
-        Vec2 { x: 0..X_MID, y: 0..Y_MID } => Some(0),     // Top left
-        Vec2 { x: XM2..MAP_W, y: 0..Y_MID } => Some(1),   // Top right
-        Vec2 { x: 0..X_MID, y: YM2..MAP_H } => Some(2),   // Bottom left
-        Vec2 { x: XM2..MAP_W, y: YM2..MAP_H } => Some(3), // Bottom right
-        _ => None,
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Robot {
-    pub pos: Vec2,
-    pub vel: Vec2,
-}
-
-impl FromStr for Robot {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut bits = s.split_whitespace();
-        let p = bits.next().unwrap();
-        let v = bits.next().ok_or("missing whitespace in robot input")?;
-        let pi = p.find("p=").ok_or("robot pos missing 'p='")?;
-        let vi = v.find("v=").ok_or("robot vel missing 'v='")?;
-        let pxy = p.get(pi + 2..).ok_or("robot p= missing vector")?;
-        let vxy = v.get(vi + 2..).ok_or("robot v= missing vector")?;
-        Ok(Robot {
-            pos: pxy.parse()?,
-            vel: vxy.parse()?,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Vec2 {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl TryFrom<Vec2> for (usize, usize) {
-    type Error = <usize as TryFrom<i32>>::Error;
-
-    fn try_from(value: Vec2) -> Result<Self, Self::Error> {
-        let x = usize::try_from(value.x)?;
-        let y = usize::try_from(value.y)?;
-        Ok((x, y))
-    }
-}
-
-impl TryFrom<(usize, usize)> for Vec2 {
-    type Error = <i32 as TryFrom<usize>>::Error;
-
-    fn try_from(value: (usize, usize)) -> Result<Self, Self::Error> {
-        let x = i32::try_from(value.0)?;
-        let y = i32::try_from(value.1)?;
-        Ok(Vec2 { x, y })
-    }
-}
-
-impl Vec2 {
-    pub fn wrap(&mut self, limits: &Vec2) {
-        self.x = self.x.rem_euclid(limits.x);
-        self.y = self.y.rem_euclid(limits.y);
-    }
-}
-
-impl FromStr for Vec2 {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (x, y) = s.split_once(",").ok_or("vec2 missing a comma")?;
-        let x = x.parse().or(Err("failed to parse 'x'"))?;
-        let y = y.parse().or(Err("failed to parse 'y'"))?;
-        Ok(Vec2 { x, y })
-    }
-}
-
-impl Display for Vec2 {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Debug::fmt(&(self.x, self.y), f)
-    }
-}
-
-impl Mul<i32> for Vec2 {
-    type Output = Vec2;
-
-    fn mul(self, rhs: i32) -> Self::Output {
-        Vec2 { x: self.x * rhs, y: self.y * rhs }
-    }
-}
-
-impl Mul<Vec2> for i32 {
-    type Output = Vec2;
-
-    fn mul(self, rhs: Vec2) -> Self::Output {
-        Vec2 { x: self * rhs.x, y: self * rhs.y }
-    }
-}
-
-impl Add<Vec2> for Vec2 {
-    type Output = Vec2;
-
-    fn add(self, rhs: Vec2) -> Self::Output {
-        Vec2 {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-        }
-    }
-}
-
-impl AddAssign<Vec2> for Vec2 {
-    fn add_assign(&mut self, rhs: Vec2) {
-        self.x += rhs.x;
-        self.y += rhs.y;
-    }
-}
-
-impl SubAssign<Vec2> for Vec2 {
-    fn sub_assign(&mut self, rhs: Vec2) {
-        self.x -= rhs.x;
-        self.y -= rhs.y;
-    }
-}
-
-impl GridIndex for Vec2 {
-    fn x(&self) -> usize {
-        usize::try_from(self.x).unwrap()
-    }
-
-    fn y(&self) -> usize {
-        usize::try_from(self.y).unwrap()
-    }
-
-    fn from_xy(x: usize, y: usize) -> Self {
-        (x, y).try_into().unwrap()
-    }
-}
-
-struct Map {
-    robots: Vec<Robot>,
-    counts: Grid<u32>,
-    // max_found: u32,
-}
-
-impl Map {
-    /// Used for shading the colours
-    const MAX_PER_CELL: u32 = 5;
-
-    pub fn new(width: usize, height: usize, robots: impl IntoIterator<Item = Robot>) -> Self {
-        assert!(width & 1 == 1, "width must be an odd number");
-        assert!(height & 1 == 1, "height must be an odd number");
-
-        let mut counts = Grid::empty(width, height);
-        // let mut max_found = 0;
-        let robots = robots
-            .into_iter()
-            .inspect(|robot| {
-                counts[robot.pos] += 1;
-                // max_found = u32::max(counts[robot.pos], max_found);
-            })
-            .collect();
-
-        Map {
-            robots,
-            counts, /* max_found */
-        }
-    }
-
-    // pub fn max_found(&self) -> u32 {
-    //     self.max_found
-    // }
-
-    pub fn quadrant_counts(&self) -> ([u32; 4], u32) {
-        let mut quadrants = [0; 4];
-        let mut outside = 0;
-
-        for Robot { pos, .. } in &self.robots {
-            if let Some(i) = quadrant(pos) {
-                quadrants[i] += 1
-            } else {
-                outside += 1;
-            }
-        }
-
-        (quadrants, outside)
-    }
-
-    pub fn safety_factor(quadrants: [u32; 4]) -> u32 {
-        quadrants.into_iter().fold(1, |a, c| a * c)
-    }
-
-    pub fn step_robots(&mut self) {
-        let limits = self.counts.size().try_into().unwrap();
-        for robot in &mut self.robots {
-            self.counts[robot.pos] -= 1;
-            robot.pos += robot.vel;
-            robot.pos.wrap(&limits);
-            self.counts[robot.pos] += 1;
-            // self.max_found = self.max_found.max(self.counts[robot.pos]);
-        }
-    }
-
-    pub fn step_robots_back(&mut self) {
-        let limits = self.counts.size().try_into().unwrap();
-        for robot in &mut self.robots {
-            self.counts[robot.pos] -= 1;
-            robot.pos -= robot.vel;
-            robot.pos.wrap(&limits);
-            self.counts[robot.pos] += 1;
-            // self.max_found = self.max_found.max(self.counts[robot.pos]);
-        }
-    }
-
-    pub fn display_robots(&self, out: &mut impl Write) -> io::Result<()> {
-        for y in 0..self.counts.height() {
-            queue!(out, MoveTo(0, y as u16), SetBackgroundColor(Color::Rgb { r: 0, g: 0, b: 0 }))?;
-            let mut last_c = None;
-
-            let is_h_mid = y == (Y_MID + 1) as usize;
-
-            for x in 0..self.counts.width() {
-                let n = self.counts[(x, y)];
-                let c = u32::min(n * 255 / Self::MAX_PER_CELL, 255) as u8;
-
-                let is_v_mid = x == (X_MID + 1) as usize;
-
-                if last_c.is_none_or(|last| last != c) {
-                    last_c = Some(c);
-                    if c == 0 {
-                        queue!(out, SetBackgroundColor(Color::Reset))?;
-                    } else {
-                        queue!(out, SetBackgroundColor(Color::Rgb { r: c, g: c, b: c }))?;
-                    }
-                }
-
-                if n > 0 {
-                    queue!(out, Print(n))?;
-                } else {
-                    let char = match (is_v_mid, is_h_mid) {
-                        (false, false) => ' ',
-                        (true, false) => '│', // U+2502 light vertical
-                        (false, true) => '─', // U+2500 light horizontal
-                        (true, true) => '┼',  // U+253C light both
-                    };
-                    queue!(out, Print(char))?;
-                }
-            }
-        }
-
-        queue!(out, ResetColor)?;
-        Ok(())
-    }
+    (quadrants, outside)
 }
