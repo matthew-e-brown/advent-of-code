@@ -1,32 +1,61 @@
 mod charsets;
 mod robot;
 
+use std::error::Error;
 use std::io::{self, StdoutLock, Write};
-use std::marker::PhantomData;
 use std::ops::ControlFlow;
 use std::process::ExitCode;
 use std::time::Duration;
 
 use aoc_utils::Grid;
+use aoc_utils::clap::{self, Parser};
 use crossterm::QueueableCommand;
-use crossterm::cursor::{DisableBlinking, EnableBlinking, Hide as HideCursor, MoveTo, Show as ShowCursor};
+use crossterm::cursor::{self, DisableBlinking, EnableBlinking, Hide as HideCursor, MoveTo, Show as ShowCursor};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 #[cfg(not(windows))]
 use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
 use crossterm::style::{Color, Print, SetBackgroundColor, SetForegroundColor};
-use crossterm::terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{self, Clear, ClearType, DisableLineWrap, EnableLineWrap};
 
-use self::charsets::CharSet;
+use self::charsets::Charset;
 use self::robot::{Robot, Vec2};
 
 pub const MAP_W: usize = 101;
 pub const MAP_H: usize = 103;
 
+#[derive(Debug, Parser)]
+#[command(disable_help_flag = true)]
+struct Args {
+    /// How wide of a map to place the robots from the provided input file onto.
+    ///
+    /// This value is not provided as part of the main puzzle input, since it is supposed to be constant. This precludes
+    /// using smaller grids for tests, however. This option provides a way to override the hardcoded default.
+    #[arg(short, long, default_value_t = MAP_W)]
+    width: usize,
+
+    /// How tall of a map to place the robots from the provided input file onto.
+    ///
+    /// This value is not provided as part of the main puzzle input, since it is supposed to be constant. This precludes
+    /// using smaller grids for tests, however. This option provides a way to override the hardcoded default.
+    #[arg(short, long, default_value_t = MAP_H)]
+    height: usize,
+
+    /// Which character-set to use for printing the robot map.
+    #[arg(short, long, value_enum, default_value_t = Charset::Braille)]
+    charset: Charset,
+
+    /// Print help (see a summary with '-?').
+    #[arg(short = '?', long, action = clap::ArgAction::Help)]
+    help: (),
+}
+
 fn main() -> ExitCode {
+    let Args { width, height, charset, .. } = aoc_utils::parse_puzzle_args::<Args>();
     let robots = aoc_utils::puzzle_input().lines().map(|line| line.parse().unwrap());
 
-    // Swap `Braille` for `Quadrants` to use different Unicode characters for rendering.
-    match App::<charsets::Braille>::new(robots).run() {
+    let app = App::new(width, height, charset, robots);
+
+    match app.run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("{err}");
@@ -35,25 +64,8 @@ fn main() -> ExitCode {
     }
 }
 
-pub fn setup_terminal() -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-    stdout.queue(EnterAlternateScreen)?.queue(DisableBlinking)?.queue(HideCursor)?;
-    #[cfg(not(windows))]
-    // Non-Windows devices need `REPORT_EVENT_TYPES` active to be able to read whether or not a KeyEvent is a
-    // press/release/hold etc. But trying to set the flag on Windows results in a crash.
-    stdout.queue(PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES))?;
-    stdout.flush()
-}
-
-pub fn restore_terminal() -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-    stdout.queue(LeaveAlternateScreen)?.queue(EnableBlinking)?.queue(ShowCursor)?;
-    #[cfg(not(windows))]
-    stdout.queue(PopKeyboardEnhancementFlags)?;
-    stdout.flush()
-}
-
-struct App<C: CharSet> {
+struct App {
+    // Simulation state:
     robots: Vec<Robot>,
     counts: Grid<u8>,
     safety: u32,
@@ -62,13 +74,24 @@ struct App<C: CharSet> {
     safety100: Option<u32>,
     timestamp: i32,
     paused: bool,
-    _marker: PhantomData<C>,
+    // For rendering:
+    charset: Charset,
+    start_row: u16,
 }
 
-impl<C: CharSet> App<C> {
-    pub fn new(robots: impl IntoIterator<Item = Robot>) -> Self {
-        let mut counts = Grid::<u8>::empty(MAP_W, MAP_H);
-        let robots = robots.into_iter().inspect(|Robot { pos, .. }| counts[*pos] += 1).collect();
+impl App {
+    pub fn new(width: usize, height: usize, charset: Charset, robots: impl IntoIterator<Item = Robot>) -> Self {
+        let mut counts = Grid::<u8>::empty(width, height);
+
+        let robots = robots
+            .into_iter()
+            .inspect(|Robot { pos, .. }| {
+                assert!((pos.x as usize) < width, "width is not large enough to accommodate all input robots");
+                assert!((pos.y as usize) < height, "height is not large enough to accommodate all input robots");
+                counts[*pos] += 1;
+            })
+            .collect();
+
         App {
             counts,
             robots,
@@ -78,13 +101,13 @@ impl<C: CharSet> App<C> {
             safety100: None,
             timestamp: 0,
             paused: false,
-            _marker: PhantomData,
+            charset,
+            start_row: 0,
         }
     }
 
-    pub fn run(mut self) -> io::Result<()> {
-        setup_terminal()?;
-
+    pub fn run(mut self) -> Result<(), Box<dyn Error>> {
+        self.setup_terminal()?;
         self.draw()?;
 
         loop {
@@ -114,7 +137,7 @@ impl<C: CharSet> App<C> {
             }
         }
 
-        restore_terminal()?;
+        self.restore_terminal()?;
         Ok(())
     }
 
@@ -154,15 +177,20 @@ impl<C: CharSet> App<C> {
     }
 
     fn draw_robots(&self, stdout: &mut StdoutLock) -> io::Result<()> {
+        // ANSI 16 is Xterm's "Grey0": forces 0,0,0 rgb, as opposed to using the "black" from the user's terminal theme
+        // (which is often just a dark grey).
         stdout
-            .queue(SetBackgroundColor(Color::Black))?
+            .queue(SetBackgroundColor(Color::AnsiValue(16)))?
             .queue(SetForegroundColor(Color::Green))?;
 
+        let x_step = self.charset.x_step();
+        let y_step = self.charset.y_step();
+
         // We need to iterate over the grid in chunks of 2 across and 8 down to properly generate braille characters.
-        for (term_y, grid_y) in (0..self.counts.height()).step_by(C::Y_STEP).enumerate() {
-            stdout.queue(MoveTo(0, term_y as u16))?;
-            for grid_x in (0..self.counts.width()).step_by(C::X_STEP) {
-                let c = C::make_char(&self.counts, grid_x, grid_y);
+        for (term_y, grid_y) in (0..self.counts.height()).step_by(y_step).enumerate() {
+            stdout.queue(MoveTo(0, self.start_row + term_y as u16))?;
+            for grid_x in (0..self.counts.width()).step_by(x_step) {
+                let c = self.charset.make_char(&self.counts, grid_x, grid_y);
                 stdout.queue(Print(c))?;
             }
         }
@@ -175,12 +203,12 @@ impl<C: CharSet> App<C> {
     }
 
     fn draw_stats(&self, stdout: &mut StdoutLock) -> io::Result<()> {
-        let x = (self.counts.width() / C::X_STEP + 3) as u16;
+        let x = self.charset.grid_width_term(self.counts.width()) + 2;
 
         macro_rules! info_line {
             ($y:expr, $($prints:expr),*) => {
                 stdout
-                .queue(MoveTo(x, $y))?
+                .queue(MoveTo(x, self.start_row + $y))?
                 $( .queue(Print($prints))? )*
                 .queue(Clear(ClearType::UntilNewLine))?
             };
@@ -212,7 +240,8 @@ impl<C: CharSet> App<C> {
     }
 
     fn handle_events(&mut self, delay: Duration) -> io::Result<ControlFlow<()>> {
-        // We only want to call `event::read` when we are ready to block; these two cases
+        // We only want to call `event::read` when we are ready to block. When we're paused, we are always ready to
+        // block; but when animating, the caller will pass in a Duration for how long they wish to delay the animation.
         if self.paused || event::poll(delay)? {
             use KeyEventKind::Press;
             if let Event::Key(KeyEvent { code, kind: Press, .. }) = event::read()? {
@@ -227,6 +256,71 @@ impl<C: CharSet> App<C> {
         }
 
         Ok(ControlFlow::Continue(()))
+    }
+
+    fn setup_terminal(&mut self) -> Result<(), Box<dyn Error>> {
+        // We want to print a blank line after our printed grid, just for some margins. So we need one more than the
+        // grid's height.
+        let rows_needed = self.charset.grid_height_term(self.counts.height()) + 1;
+        let (_, term_rows) = terminal::size()?;
+        (_, self.start_row) = cursor::position()?;
+
+        if rows_needed > term_rows {
+            return Err(format!(
+                "The chosen character set is too large to fit on the current terminal screen! ({} rows > {} height)",
+                rows_needed, term_rows,
+            )
+            .into());
+        }
+
+        // This will be the `y` position of the blank line after the printed grid.
+        let bottom_row = self.start_row + rows_needed;
+
+        // A scroll-up is needed if `bottom_row < term_rows`. If we have 70 total rows, and our bottom row would be 69
+        // (the last row), then we're good. But if it would be 70, we need to move down by 1; ergo, `bottom - term_rows
+        // + 1`, or `bottom - (term_rows - 1)`.
+        if let Some(needed @ 1..) = bottom_row.checked_sub(term_rows - 1) {
+            /* stdout.execute(ScrollUp(needed))?; */
+
+            // Hack: Using the ANSI `ScrollUp` command seems to prevent the terminal from keeping the scrollback buffer
+            // intact (at least, in Windows Terminal 2025-03-24). Doesn't seem to be 100% equivalent to pushing new
+            // blank rows onto the bottom of the terminal.
+            for _ in 0..needed {
+                println!();
+            }
+
+            self.start_row -= needed;
+        }
+
+        let mut stdout = io::stdout().lock();
+
+        // Non-Windows devices need an extra flag to be active to be able to read whether or not a KeyEvent is a
+        // press/release/hold etc. That feature is always enabled on Windows, but trying to set it on Windows results in
+        // a crash. So, it is gated with `cfg`.
+        #[cfg(not(windows))]
+        stdout.queue(PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES))?;
+        stdout
+            .queue(DisableBlinking)?
+            .queue(DisableLineWrap)?
+            .queue(HideCursor)?
+            .flush()?;
+        Ok(())
+    }
+
+    fn restore_terminal(&mut self) -> io::Result<()> {
+        // Based on where the cursor was when we set up the terminal, skip down by the right number of lines.
+        let grid_height = self.charset.grid_height_term(self.counts.height());
+
+        let mut stdout = io::stdout().lock();
+
+        #[cfg(not(windows))]
+        stdout.queue(PopKeyboardEnhancementFlags)?;
+        stdout
+            .queue(MoveTo(0, self.start_row + grid_height + 1))?
+            .queue(EnableBlinking)?
+            .queue(EnableLineWrap)?
+            .queue(ShowCursor)?
+            .flush()
     }
 }
 
