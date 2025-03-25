@@ -438,19 +438,19 @@ impl<Idx: GridIndex> Neighbours<Idx> {
     /// Returns the number of cells adjacent to this one (excluding diagonals) which have a valid neighbour (i.e., those
     /// that are within the bounds of the [Grid]).
     pub fn num_adjacent(&self) -> u8 {
-        (self.mask & Self::MASK_N > 0) as u8
-            + (self.mask & Self::MASK_E > 0) as u8
-            + (self.mask & Self::MASK_S > 0) as u8
-            + (self.mask & Self::MASK_W > 0) as u8
+        (self.mask & Self::MASK_N == Self::MASK_N) as u8
+            + (self.mask & Self::MASK_E == Self::MASK_E) as u8
+            + (self.mask & Self::MASK_S == Self::MASK_S) as u8
+            + (self.mask & Self::MASK_W == Self::MASK_W) as u8
     }
 
     /// Returns the number of cells diagonally adjacent to this one (excluding N, E, S, W) which have a valid neighbour
     /// (i.e., those that are within the bounds of the [Grid]).
     pub fn num_corners(&self) -> u8 {
-        (self.mask & Self::MASK_NE > 0) as u8
-            + (self.mask & Self::MASK_SE > 0) as u8
-            + (self.mask & Self::MASK_SW > 0) as u8
-            + (self.mask & Self::MASK_NW > 0) as u8
+        (self.mask & Self::MASK_NE == Self::MASK_NE) as u8
+            + (self.mask & Self::MASK_SE == Self::MASK_SE) as u8
+            + (self.mask & Self::MASK_SW == Self::MASK_SW) as u8
+            + (self.mask & Self::MASK_NW == Self::MASK_NW) as u8
     }
 
     /// Returns the number of cells around this one (including diagonals) which have a valid neighbour (i.e., those that
