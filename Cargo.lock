@@ -65,6 +65,7 @@ name = "aoc_utils"
 version = "0.1.0"
 dependencies = [
  "arrayvec",
+ "auto_ops",
  "clap",
  "regex",
  "scoped_threadpool",
@@ -76,6 +77,12 @@ name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+
+[[package]]
+name = "auto_ops"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7460f7dd8e100147b82a63afca1a20eb6c231ee36b90ba7272e14951cb58af59"
 
 [[package]]
 name = "autocfg"

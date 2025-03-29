@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 arrayvec = "0.7.6"
+auto_ops = "0.3.0"
 clap = { version = "4.5.23", features = ["derive"] }
 regex = "1.11.1"
 scoped_threadpool = "0.1.9"
