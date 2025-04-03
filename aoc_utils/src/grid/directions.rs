@@ -39,11 +39,26 @@ pub trait Direction: Copy + Into<Dir8> {
         self.into()
     }
 
-    /// Adds this direction to the given position, as long as its remains within the givin `(w, h)` limits.
+    /// Adds this direction to the given position, returning `Some` as long as the resulting position is within the
+    /// givin `(w, h)` limits.
     fn checked_add<Idx: GridIndex>(self, pos: Idx, limits: (usize, usize)) -> Option<Idx> {
         let (w, h) = limits;
         let x = pos.x().checked_add_signed(self.x_offset().as_isize())?;
         let y = pos.y().checked_add_signed(self.y_offset().as_isize())?;
+        (x < w && y < h).then(|| Idx::from_xy(x, y))
+    }
+
+    /// Adds this direction to the given position `n` times, returning `Some` as long as the resulting position is
+    /// within the givin `(w, h)` limits.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if `n` is greater than [`isize::MAX`].
+    fn checked_add_n<Idx: GridIndex>(self, pos: Idx, n: usize, limits: (usize, usize)) -> Option<Idx> {
+        let (w, h) = limits;
+        let n = isize::try_from(n).expect("n should be <= isize::MAX");
+        let x = pos.x().checked_add_signed(self.x_offset().as_isize() * n)?;
+        let y = pos.y().checked_add_signed(self.y_offset().as_isize() * n)?;
         (x < w && y < h).then(|| Idx::from_xy(x, y))
     }
 }
@@ -567,74 +582,6 @@ impl Dir8 {
     }
 }
 
-macro_rules! impl_dir_ops {
-    ($name:ident, $pos:ty) => {
-        impl_op_ex!(+ |pos: &$pos, dir: &$name| -> $pos {
-            let x = match dir.x_offset() {
-                Offset::Zero => pos.x(),
-                Offset::Negative => pos.x() - 1,
-                Offset::Positive => pos.x() + 1,
-            };
-
-            let y = match dir.y_offset() {
-                Offset::Zero => pos.y(),
-                Offset::Negative => pos.y() - 1,
-                Offset::Positive => pos.y() + 1,
-            };
-
-            <$pos>::from_xy(x, y)
-        });
-
-        impl_op_ex!(- |pos: &$pos, dir: &$name| -> $pos {
-            let x = match dir.x_offset() {
-                Offset::Zero => pos.x(),
-                Offset::Negative => pos.x() + 1, // if x is -1, subtracting it means adding +1.
-                Offset::Positive => pos.x() - 1,
-            };
-
-            let y = match dir.y_offset() {
-                Offset::Zero => pos.y(),
-                Offset::Negative => pos.y() + 1,
-                Offset::Positive => pos.y() - 1,
-            };
-
-            <$pos>::from_xy(x, y)
-        });
-
-        impl_op_ex!(+= |pos: &mut $pos, dir: &$name| {
-            match dir.x_offset() {
-                Offset::Zero => {},
-                Offset::Negative => pos.0 -= 1,
-                Offset::Positive => pos.0 += 1,
-            }
-
-            match dir.y_offset() {
-                Offset::Zero => {},
-                Offset::Negative => pos.1 -= 1,
-                Offset::Positive => pos.1 += 1,
-            }
-        });
-
-        impl_op_ex!(-= |pos: &mut $pos, dir: &$name| {
-            match dir.x_offset() {
-                Offset::Zero => {},
-                Offset::Negative => pos.0 += 1,
-                Offset::Positive => pos.0 -= 1,
-            }
-
-            match dir.y_offset() {
-                Offset::Zero => {},
-                Offset::Negative => pos.1 += 1,
-                Offset::Positive => pos.1 -= 1,
-            }
-        });
-    };
-}
-
-impl_dir_ops!(Dir4, (usize, usize));
-impl_dir_ops!(Dir8, (usize, usize));
-// [TODO] impl_dir_ops! with (isize, isize) / (i32, i32) to avoid underflow panics
-
 impl Neg for Dir4 {
     type Output = Dir4;
     fn neg(self) -> Self::Output {
@@ -649,78 +596,70 @@ impl Neg for Dir8 {
     }
 }
 
-// Sadly, we can't add an `impl` like this due to Rust's orphaning rules; so we need to use a macro instead. This will
-// _probably_ be possible in at least _some_ capacity once specialization lands in stable; [FIXME] then.
+macro_rules! impl_dir_ops {
+    ($dir:ty, $pos:ty) => {
+        impl_op_ex!(+ |pos: &$pos, dir: &$dir| -> $pos {
+            let x = pos.x().checked_add_signed(dir.x_offset().as_isize()).expect("attempt to add position + direction with overflow");
+            let y = pos.y().checked_add_signed(dir.y_offset().as_isize()).expect("attempt to add position + direction with overflow");
+            <$pos as GridIndex>::from_xy(x, y)
+        });
+
+        impl_op_ex!(- |pos: &$pos, dir: &$dir| -> $pos {
+            // [FIXME] `feature(mixed_integer_ops_unsigned_sub)`: https://github.com/rust-lang/rust/issues/126043
+            let x = pos.x().checked_add_signed(-dir.x_offset().as_isize()).expect("attempt to subtract position - direction with overflow");
+            let y = pos.y().checked_add_signed(-dir.y_offset().as_isize()).expect("attempt to subtract position - direction with overflow");
+            <$pos as GridIndex>::from_xy(x, y)
+        });
+
+        impl_op_ex!(+= |pos: &mut $pos, dir: &$dir| {
+            *pos = *pos + dir;
+        });
+
+        impl_op_ex!(-= |pos: &mut $pos, dir: &$dir| {
+            *pos = *pos - dir;
+        });
+    };
+}
+
+impl_dir_ops!(Dir4, (usize, usize));
+impl_dir_ops!(Dir8, (usize, usize));
+impl_dir_ops!(Dir4, [usize; 2]);
+impl_dir_ops!(Dir8, [usize; 2]);
+
+// [FIXME] Sadly, we can't add a blanket `impl` for all `GridIndex` types due to Rust's orphaning rules, hence the
+// macro. This will _probably_ be possible in at least _some_ capacity, once specialization _eventually_ lands in
+// stable...
 
 /* impl<D: Direction, I: GridIndex> Add<D> for I {
     type Output = I;
 
     fn add(self, rhs: D) -> Self::Output {
-        let x = match rhs.x_offset() {
-            0 => self.x(),
-            x @ ..0 => self.x() - x.unsigned_abs(),
-            x @ 1.. => self.x() + x.unsigned_abs(),
-        };
-
-        let y = match rhs.y_offset() {
-            0 => self.y(),
-            y @ ..0 => self.y() - y.unsigned_abs(),
-            y @ 1.. => self.y() + y.unsigned_abs(),
-        };
-
+        let x = self.x().checked_add_signed(rhs.x_offset().as_isize()).expect("attempt to add position + direction with overflow");
+        let y = self.y().checked_add_signed(rhs.y_offset().as_isize()).expect("attempt to add position + direction with overflow");
         I::from_xy(x, y)
     }
 }
 
-impl<D: Direction> Sub<D> for Pos {
-    type Output = Pos;
+impl<D: Direction, I: GridIndex> Sub<D> for I {
+    type Output = I;
 
     fn sub(self, rhs: D) -> Self::Output {
-        let x = match rhs.x_offset() {
-            0 => self.0,
-            x @ ..0 => self.0 + x.unsigned_abs(), // if x is -1, subtracting it means adding +1.
-            x @ 1.. => self.0 - x.unsigned_abs(),
-        };
-
-        let y = match rhs.y_offset() {
-            0 => self.1,
-            y @ ..0 => self.1 + y.unsigned_abs(),
-            y @ 1.. => self.1 - y.unsigned_abs(),
-        };
-
-        (x, y)
+        // [FIXME] `feature(mixed_integer_ops_unsigned_sub)`: https://github.com/rust-lang/rust/issues/126043
+        let x = self.x().checked_add_signed(-rhs.x_offset().as_isize()).expect("attempt to subtract position - direction with overflow");
+        let y = self.y().checked_add_signed(-rhs.y_offset().as_isize()).expect("attempt to subtract position - direction with overflow");
+        I::from_xy(x, y)
     }
 }
 
-impl<D: Direction> AddAssign<D> for Pos {
+impl<D: Direction, I: GridIndex> AddAssign<D> for I {
     fn add_assign(&mut self, rhs: D) {
-        match rhs.x_offset() {
-            0 => {},
-            x @ ..0 => self.0 += x.unsigned_abs(),
-            x @ 1.. => self.0 -= x.unsigned_abs(),
-        }
-
-        match rhs.y_offset() {
-            0 => {},
-            y @ ..0 => self.1 += y.unsigned_abs(),
-            y @ 1.. => self.1 -= y.unsigned_abs(),
-        }
+        *self = *self + rhs;
     }
 }
 
-impl<D: Direction> SubAssign<D> for Pos {
+impl<D: Direction, I: GridIndex> SubAssign<D> for I {
     fn sub_assign(&mut self, rhs: D) {
-        match rhs.x_offset() {
-            0 => {},
-            x @ ..0 => self.0 -= x.unsigned_abs(),
-            x @ 1.. => self.0 += x.unsigned_abs(),
-        }
-
-        match rhs.y_offset() {
-            0 => {},
-            y @ ..0 => self.1 -= y.unsigned_abs(),
-            y @ 1.. => self.1 += y.unsigned_abs(),
-        }
+        *self = *self - rhs;
     }
 } */
 
