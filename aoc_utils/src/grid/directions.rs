@@ -38,6 +38,14 @@ pub trait Direction: Copy + Into<Dir8> {
     fn into_dir8(self) -> Dir8 {
         self.into()
     }
+
+    /// Adds this direction to the given position, as long as its remains within the givin `(w, h)` limits.
+    fn checked_add<Idx: GridIndex>(self, pos: Idx, limits: (usize, usize)) -> Option<Idx> {
+        let (w, h) = limits;
+        let x = pos.x().checked_add_signed(self.x_offset().as_isize())?;
+        let y = pos.y().checked_add_signed(self.y_offset().as_isize())?;
+        (x < w && y < h).then(|| Idx::from_xy(x, y))
+    }
 }
 
 /// An offset of either +1, -1, or 0.

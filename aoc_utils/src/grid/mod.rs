@@ -54,15 +54,6 @@ fn index1d<Idx: GridIndex>(pos: Idx, w: usize) -> usize {
     pos.y() * w + pos.x()
 }
 
-/// Given the size of a [Grid], converts a two-dimensional [GridIndex] and a [Direction] into a position within the
-/// grid. Returns [`None`] if the position is outside the grid in either direction.
-#[inline]
-fn dir_checked_add<I: GridIndex, D: Direction>(pos: I, dir: D, (w, h): (usize, usize)) -> Option<Pos> {
-    let x = pos.x().checked_add_signed(dir.x_offset().as_isize())?;
-    let y = pos.y().checked_add_signed(dir.y_offset().as_isize())?;
-    (x < w && y < h).then(|| (x, y))
-}
-
 #[rustfmt::skip]
 impl GridIndex for (usize, usize) {
     fn x(&self) -> usize { self.0 }
@@ -175,12 +166,6 @@ impl<T> Grid<T> {
         pos.x() < self.w && pos.y() < self.h
     }
 
-    /// Checks whether or not the cell in the given direction from the starting position is within the bounds of this
-    /// grid.
-    pub fn contains_dir<Idx: GridIndex, Dir: Direction>(&self, pos: Idx, dir: Dir) -> bool {
-        dir_checked_add(pos, dir, self.size()).is_some()
-    }
-
     /// Gets a reference to the item at the given position in this grid. Returns `None` if `pos` is out of bounds.
     pub fn get<Idx: GridIndex>(&self, pos: Idx) -> Option<&T> {
         if self.contains(pos) {
@@ -215,12 +200,18 @@ impl<T> Grid<T> {
         unsafe { self.buf.get_unchecked_mut(idx) }
     }
 
+    /// Checks whether or not the cell in the given direction from the starting position is within the bounds of this
+    /// grid.
+    pub fn has_neighbour<Idx: GridIndex, Dir: Direction>(&self, pos: Idx, dir: Dir) -> bool {
+        dir.checked_add(pos, self.size()).is_some()
+    }
+
     /// Gets a reference to the item in front of the given position, in the given direction.
     ///
     /// To access the neighbouring _positions themselves_ (not just references), see [`Grid::neighbours`].
     pub fn get_neighbour<Dir: Direction, Idx: GridIndex>(&self, pos: Idx, dir: Dir) -> Option<&T> {
-        let pos = dir_checked_add(pos, dir, self.size())?;
-        // SAFETY: `dir_checked_add` checks bounds.
+        let pos = dir.checked_add(pos, self.size())?;
+        // SAFETY: `checked_add` checks bounds.
         Some(unsafe { self.get_unchecked(pos) })
     }
 
@@ -228,8 +219,8 @@ impl<T> Grid<T> {
     ///
     /// To access the neighbouring _positions themselves_ (not just references), see [`Grid::neighbours`].
     pub fn get_neighbour_mut<Dir: Direction, Idx: GridIndex>(&mut self, pos: Idx, dir: Dir) -> Option<&mut T> {
-        let pos = dir_checked_add(pos, dir, self.size())?;
-        // SAFETY: `dir_checked_add` checks bounds.
+        let pos = dir.checked_add(pos, self.size())?;
+        // SAFETY: `checked_add` checks bounds.
         Some(unsafe { self.get_unchecked_mut(pos) })
     }
 
