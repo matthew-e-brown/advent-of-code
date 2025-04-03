@@ -1,3 +1,9 @@
+//! Data structures and types for solving grid-based puzzles.
+//!
+//! Two-dimensional grids are very common in Advent of Code puzzles. Having a [single common implementation][Grid] for
+//! all puzzles greatly reduces code repetition. By having the implementation here, the fun programming challenge of
+//! implementing the data structure remains, but the puzzles themselves can stay focused on the actual logic.
+
 pub mod directions;
 pub mod neighbours;
 

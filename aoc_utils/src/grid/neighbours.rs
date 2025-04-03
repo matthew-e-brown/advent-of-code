@@ -1,3 +1,5 @@
+//! Structures and iterators relating to the neighbours around a given cell in a two-dimensional grid.
+
 use super::directions::{Dir4Iter, Dir8Iter, Direction};
 use super::{Dir4, Dir8, GridIndex};
 

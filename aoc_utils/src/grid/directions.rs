@@ -1,3 +1,12 @@
+//! Directions within a [two dimensional grid][super::Grid].
+//!
+//! Grids are fairly common in Advent of Code puzzles. Of all the puzzles that related to two-dimensional grids, a great
+//! number of them involve considering "directions". Which way is the robot currently facing? Which neighbours of a
+//! given cell meet some condition?
+//!
+//! The primary purpose of [`Dir4`] and [`Dir8`] from this module are to avoid having to redefine a new enum and any
+//! associated helper methods every single time a new puzzle involves directions.
+
 use std::fmt::{self, Debug, Display};
 use std::ops::Neg;
 use std::str::FromStr;
