@@ -1,12 +1,12 @@
 //! A collection of commonly used types, utility functions, and re-exports of frequently used third-party crates.
 
+mod cli;
 pub mod grid;
-mod input;
 
 pub use {arrayvec, regex, scoped_threadpool};
 
+pub use self::cli::*;
 pub use self::grid::Grid;
-pub use self::input::*;
 
 /// Creates a new threadpool (see [`scoped_threadpool`]).
 ///

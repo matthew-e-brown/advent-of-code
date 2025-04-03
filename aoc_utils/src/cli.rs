@@ -33,6 +33,7 @@ struct Input {
 }
 
 // Clap won't accept `fs::read_to_string` directly because of a lifetime issue:
+//
 // - https://github.com/clap-rs/clap/issues/4939
 // - https://www.reddit.com/r/rust/comments/ntqu68/implementation_of_fnonce_is_not_general_enough/
 //
