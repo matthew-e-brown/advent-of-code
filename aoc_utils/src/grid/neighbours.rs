@@ -38,7 +38,7 @@ fn get_mask(dir: Dir8) -> u8 {
         Dir8::DownRight => MASK_SE,
         Dir8::Down => MASK_S,
         Dir8::DownLeft => MASK_SW,
-        Dir8::Left => MASK_E,
+        Dir8::Left => MASK_W,
         Dir8::UpLeft => MASK_NW,
     }
 }
