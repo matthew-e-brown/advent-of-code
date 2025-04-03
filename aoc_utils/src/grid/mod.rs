@@ -304,12 +304,11 @@ impl<T> Grid<T> {
     }
 
     /// Creates a new [Grid] with the same size as this one by applying a mapping function to each element.
-    pub fn map<B, F>(&self, f: F) -> Grid<B>
+    pub fn map<B, F>(&self, mut f: F) -> Grid<B>
     where
-        F: FnMut(&T) -> B,
+        F: FnMut(&T, (usize, usize)) -> B,
     {
-        // [TODO] Update `f` to also accept positions
-        let buf = self.buf.iter().map(f).collect::<Box<[B]>>();
+        let buf = self.positions().map(|pos| f(&self[pos], pos)).collect::<Box<[B]>>();
         Grid { buf, w: self.w, h: self.h }
     }
 }
