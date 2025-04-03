@@ -273,6 +273,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "day-15"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
