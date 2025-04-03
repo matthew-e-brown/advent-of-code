@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 use std::sync::mpsc;
 
+use aoc_utils::grid::Pos as Position;
 use aoc_utils::Grid;
-
-type Position = (usize, usize);
 
 fn main() {
     let input = aoc_utils::puzzle_input();

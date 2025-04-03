@@ -1,7 +1,5 @@
 use aoc_utils::Grid;
-use aoc_utils::grid::Neighbours;
-
-type Position = (usize, usize);
+use aoc_utils::grid::{Neighbours, Pos as Position};
 
 const DISCOVERED: u8 = 0b01;
 const EXPLORED: u8 = 0b10;

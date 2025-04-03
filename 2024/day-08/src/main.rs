@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
 
+use aoc_utils::grid::Pos as Position;
 use aoc_utils::Grid;
 
 // cspell:words antinode antinodes
-
-type Position = (usize, usize);
 
 // Went a little extra/convoluted with this one, but I wanted to have some fun with multithreading. Who knows if it
 // actually made a performance impact. Oh well! :D

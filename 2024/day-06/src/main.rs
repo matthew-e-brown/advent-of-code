@@ -1,11 +1,10 @@
 use std::collections::BTreeSet;
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::sync::mpsc;
 
+use aoc_utils::grid::{Dir4, Direction, Pos};
 use aoc_utils::Grid;
-
-type Position = (usize, usize);
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -48,7 +47,7 @@ fn main() {
             let mut map = map.clone();
 
             // If the tile in front of us isn't already a wall, add a wall there and then begin the simulation.
-            let obs_pos = match in_front(check_pos, dir, &map) {
+            let obs_pos = match dir.checked_add(check_pos, map.size()) {
                 None => continue,
                 Some(p) if map[p].is_wall() || p == start_pos => continue,
                 Some(p) => p,
@@ -90,11 +89,11 @@ fn main() {
 /// `on_visit` accepts a closure to run once for each cell in the grid. That closure should return a [`ControlFlow`]
 /// dictating whether or not the simulation should continue looping or not. If the loop is stopped by a
 /// [`ControlFlow::Break`], then the whole function will return a `Some(T)` holding the value contained by the `Break`.
-fn run_simulation<T, F>(mut pos: Position, mut map: Grid<Cell>, mut on_visit: F) -> Option<T>
+fn run_simulation<T, F>(mut pos: Pos, mut map: Grid<Cell>, mut on_visit: F) -> Option<T>
 where
-    F: FnMut(Cell, Position, Direction) -> ControlFlow<T, ()>,
+    F: FnMut(Cell, Pos, Dir4) -> ControlFlow<T, ()>,
 {
-    let mut dir = Direction::Up;
+    let mut dir = Dir4::Up;
     loop {
         if let ControlFlow::Break(res) = on_visit(map[pos], pos, dir) {
             break Some(res);
@@ -104,24 +103,11 @@ where
 
         // Step forwards and see if we're about to hit a wall or if we've stepped out of bounds or not. When turning
         // right, let the loop restart so `on_visit` can re-run for the new direction.
-        match in_front(pos, dir, &map) {
-            Some(next_pos) if map[next_pos].is_wall() => dir.turn_right(),
+        match dir.checked_add(pos, map.size()) {
+            Some(next_pos) if map[next_pos].is_wall() => dir = dir.right(),
             Some(next_pos) => pos = next_pos,
             None => break None,
         }
-    }
-}
-
-/// Returns the tile directly "in front" of a given position, in the given direction, unless it is outside the bounds of
-/// the given grid.
-const fn in_front(pos: Position, dir: Direction, map: &Grid<Cell>) -> Option<Position> {
-    let (x, y) = pos;
-    match dir {
-        Direction::Up if y > 0 => Some((x, y - 1)),
-        Direction::Left if x > 0 => Some((x - 1, y)),
-        Direction::Down if y < map.height() - 1 => Some((x, y + 1)),
-        Direction::Right if x < map.width() - 1 => Some((x + 1, y)),
-        _ => None,
     }
 }
 
@@ -138,17 +124,26 @@ impl Cell {
     }
 
     /// Marks this cell as having been visited while facing the given direction.
-    pub const fn visit(&mut self, dir: Direction) {
+    pub const fn visit(&mut self, dir: Dir4) {
         if self.is_wall() {
             panic!("cannot visit wall cell");
         } else {
-            self.0 |= dir.mask();
+            self.0 |= dir_mask(dir);
         }
     }
 
     /// Checks if this cell has been visited while facing in a given direction.
-    pub const fn has_been_visited(&self, dir: Direction) -> bool {
-        !self.is_wall() && (self.0 & dir.mask()) > 0
+    pub const fn has_been_visited(&self, dir: Dir4) -> bool {
+        !self.is_wall() && (self.0 & dir_mask(dir)) > 0
+    }
+}
+
+const fn dir_mask(dir: Dir4) -> u8 {
+    match dir {
+        Dir4::Up => 0b0001,
+        Dir4::Down => 0b0010,
+        Dir4::Left => 0b0100,
+        Dir4::Right => 0b1000,
     }
 }
 
@@ -159,58 +154,6 @@ impl Display for Cell {
             0b1111 => "#",
             0b0001..0b1111 => "X",
             _ => "?", // unreachable!(...unless?)
-        })
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-impl Direction {
-    /// Turns this direction 90° to the right.
-    pub const fn turn_right(&mut self) {
-        *self = match self {
-            Direction::Up => Direction::Right,
-            Direction::Down => Direction::Left,
-            Direction::Left => Direction::Up,
-            Direction::Right => Direction::Down,
-        };
-    }
-
-    #[allow(unused)]
-    /// Turns this direction 90° to the left.
-    pub const fn turn_left(&mut self) {
-        *self = match self {
-            Direction::Up => Direction::Left,
-            Direction::Down => Direction::Right,
-            Direction::Left => Direction::Down,
-            Direction::Right => Direction::Up,
-        };
-    }
-
-    /// Returns a bitmask representing this direction.
-    pub const fn mask(&self) -> u8 {
-        match self {
-            Direction::Up => 0b0001,
-            Direction::Down => 0b0010,
-            Direction::Left => 0b0100,
-            Direction::Right => 0b1000,
-        }
-    }
-}
-
-impl Display for Direction {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(match self {
-            Direction::Up => "↑",
-            Direction::Down => "↓",
-            Direction::Left => "←",
-            Direction::Right => "→",
         })
     }
 }

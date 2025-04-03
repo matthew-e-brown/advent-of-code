@@ -13,8 +13,7 @@ use std::ops::{Index, IndexMut};
 
 use thiserror::Error;
 
-use self::directions::Direction;
-pub use self::directions::{Dir4, Dir8};
+pub use self::directions::{Dir4, Dir8, Direction};
 pub use self::neighbours::Neighbours;
 
 /// A 2D position used to index a [Grid].
