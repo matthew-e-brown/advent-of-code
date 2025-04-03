@@ -7,9 +7,9 @@ use std::ops::{Index, IndexMut};
 
 use thiserror::Error;
 
+use self::directions::Direction;
 pub use self::directions::{Dir4, Dir8};
 pub use self::neighbours::Neighbours;
-
 
 /// A 2D position used to index a [Grid].
 pub type Pos = (usize, usize);
@@ -24,8 +24,8 @@ pub struct Grid<T> {
 
 /// A trait representing objects that can be used to index a [two-dimensional grid][Grid].
 ///
-/// Most commonly, a [`(usize, usize)` tuple][Position] is used for grid indexing; this trait allows for arbitrary types
-/// to be used instead.
+/// Most commonly, a [`(usize, usize)` tuple][Pos] is used for grid indexing; this trait allows for arbitrary types to
+/// be used instead.
 pub trait GridIndex: Copy {
     /// Gets the `x`-component of this [GridIndex].
     fn x(&self) -> usize;
@@ -46,6 +46,15 @@ pub trait GridIndex: Copy {
 #[inline]
 fn index1d<Idx: GridIndex>(pos: Idx, w: usize) -> usize {
     pos.y() * w + pos.x()
+}
+
+/// Given the size of a [Grid], converts a two-dimensional [GridIndex] and a [Direction] into a position within the
+/// grid. Returns [`None`] if the position is outside the grid in either direction.
+#[inline]
+fn dir_checked_add<I: GridIndex, D: Direction>(pos: I, dir: D, (w, h): (usize, usize)) -> Option<Pos> {
+    let x = pos.x().checked_add_signed(dir.x_offset().as_isize())?;
+    let y = pos.y().checked_add_signed(dir.y_offset().as_isize())?;
+    (x < w && y < h).then(|| (x, y))
 }
 
 #[rustfmt::skip]
@@ -160,6 +169,12 @@ impl<T> Grid<T> {
         pos.x() < self.w && pos.y() < self.h
     }
 
+    /// Checks whether or not the cell in the given direction from the starting position is within the bounds of this
+    /// grid.
+    pub fn contains_dir<Idx: GridIndex, Dir: Direction>(&self, pos: Idx, dir: Dir) -> bool {
+        dir_checked_add(pos, dir, self.size()).is_some()
+    }
+
     /// Gets a reference to the item at the given position in this grid. Returns `None` if `pos` is out of bounds.
     pub fn get<Idx: GridIndex>(&self, pos: Idx) -> Option<&T> {
         if self.contains(pos) {
@@ -194,10 +209,28 @@ impl<T> Grid<T> {
         unsafe { self.buf.get_unchecked_mut(idx) }
     }
 
-    /// Checks the positions around the given cell, checking each one against the bounds of the grid. If the given cell
-    /// is out-of-bounds, `None` is returned.
+    /// Gets a reference to the item in front of the given position, in the given direction.
+    ///
+    /// To access the neighbouring _positions themselves_ (not just references), see [`Grid::neighbours`].
+    pub fn get_neighbour<Dir: Direction, Idx: GridIndex>(&self, pos: Idx, dir: Dir) -> Option<&T> {
+        let pos = dir_checked_add(pos, dir, self.size())?;
+        // SAFETY: `dir_checked_add` checks bounds.
+        Some(unsafe { self.get_unchecked(pos) })
+    }
+
+    /// Gets a mutable reference to the item in front of the given position, in the given direction.
+    ///
+    /// To access the neighbouring _positions themselves_ (not just references), see [`Grid::neighbours`].
+    pub fn get_neighbour_mut<Dir: Direction, Idx: GridIndex>(&mut self, pos: Idx, dir: Dir) -> Option<&mut T> {
+        let pos = dir_checked_add(pos, dir, self.size())?;
+        // SAFETY: `dir_checked_add` checks bounds.
+        Some(unsafe { self.get_unchecked_mut(pos) })
+    }
+
+    /// Gets a reference to the [neighbouring positions][Neighbours] around the given position, or `None` if `pos` is
+    /// out of bounds.
     pub fn neighbours<Idx: GridIndex>(&self, pos: Idx) -> Option<Neighbours<Idx>> {
-        self.contains(pos).then(|| Neighbours::new(pos, self.width(), self.height()))
+        self.contains(pos).then(|| Neighbours::new(pos, self.size()))
     }
 
     /// Creates a new grid of the given size by calling `f` once for every (x, y) position of the grid.

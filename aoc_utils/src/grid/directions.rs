@@ -5,20 +5,84 @@ use std::str::FromStr;
 use auto_ops::impl_op_ex;
 use thiserror::Error;
 
-use crate::grid::{GridIndex, Pos};
-
+use super::GridIndex;
 
 /// Types that represent an `x`- and/or `y`-offset in a 2D grid.
-pub trait Direction {
+pub trait Direction: Copy + Into<Dir8> {
+    /// An iterator that yields all the individual directions for this [`Direction`].
+    type Iter: Iterator<Item = Self>;
+
+    /// Returns a new instance of [`Self::Iter`][Direction::Iter].
+    fn iter() -> Self::Iter;
+
     /// Gets the horizontal component of this direction.
     ///
     /// Positive values represent "right" or "east".
-    fn x_offset(&self) -> isize;
+    fn x_offset(&self) -> Offset;
 
     /// Gets the vertical component of this direction.
     ///
     /// Positive values represent "down" or "south".
-    fn y_offset(&self) -> isize;
+    fn y_offset(&self) -> Offset;
+
+    /// Converts this direction into a [`Dir8`], which is the highest "resolution" direction.
+    fn into_dir8(self) -> Dir8 {
+        self.into()
+    }
+}
+
+/// An offset of either +1, -1, or 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Offset {
+    Positive = 1,
+    Zero = 0,
+    Negative = -1,
+}
+
+impl Offset {
+    /// Gets this [Offset] as an [`i8`] with value `-1`, `1`, or `0`.
+    pub const fn as_i8(self) -> i8 {
+        match self {
+            Offset::Positive => 1,
+            Offset::Zero => 0,
+            Offset::Negative => -1,
+        }
+    }
+
+    /// Gets this [Offset] as an [`i16`] with value `-1`, `1`, or `0`.
+    pub const fn as_i16(self) -> i16 {
+        self.as_i8() as i16
+    }
+
+    /// Gets this [Offset] as an [`i32`] with value `-1`, `1`, or `0`.
+    pub const fn as_i32(self) -> i32 {
+        self.as_i8() as i32
+    }
+
+    /// Gets this [Offset] as an [`i64`] with value `-1`, `1`, or `0`.
+    pub const fn as_i64(self) -> i64 {
+        self.as_i8() as i64
+    }
+
+    /// Gets this [Offset] as an [`isize`] with value `-1`, `1`, or `0`.
+    pub const fn as_isize(self) -> isize {
+        self.as_i8() as isize
+    }
+
+    /// Returns `true` if this [Offset] is [`Offset::Negative`].
+    pub const fn is_neg(&self) -> bool {
+        std::matches!(self, Offset::Negative)
+    }
+
+    /// Returns `true` if this [Offset] is [`Offset::Positive`].
+    pub const fn is_pos(&self) -> bool {
+        std::matches!(self, Offset::Positive)
+    }
+
+    /// Returns `true` if this [Offset] is [`Offset::Zero`].
+    pub const fn is_zero(&self) -> bool {
+        std::matches!(self, Offset::Zero)
+    }
 }
 
 /// A direction which points either up, down, left, or right (north, south, east, west).
@@ -44,37 +108,60 @@ pub enum Dir8 {
 }
 
 impl Direction for Dir4 {
-    fn x_offset(&self) -> isize {
+    type Iter = Dir4Iter;
+
+    fn iter() -> Self::Iter {
+        Dir4::iter()
+    }
+
+    fn x_offset(&self) -> Offset {
         match self {
-            Dir4::Left => -1,
-            Dir4::Right => 1,
-            Dir4::Up | Dir4::Down => 0,
+            Dir4::Left => Offset::Negative,
+            Dir4::Right => Offset::Positive,
+            Dir4::Up | Dir4::Down => Offset::Zero,
         }
     }
 
-    fn y_offset(&self) -> isize {
+    fn y_offset(&self) -> Offset {
         match self {
-            Dir4::Up => -1,
-            Dir4::Down => 1,
-            Dir4::Left | Dir4::Right => 0,
+            Dir4::Up => Offset::Negative,
+            Dir4::Down => Offset::Positive,
+            Dir4::Left | Dir4::Right => Offset::Zero,
         }
     }
 }
 
 impl Direction for Dir8 {
-    fn x_offset(&self) -> isize {
+    type Iter = Dir8Iter;
+
+    fn iter() -> Self::Iter {
+        Dir8::iter()
+    }
+
+    fn x_offset(&self) -> Offset {
         match self {
-            Dir8::Up | Dir8::Down => 0,
-            Dir8::Left | Dir8::UpLeft | Dir8::DownLeft => -1,
-            Dir8::Right | Dir8::UpRight | Dir8::DownRight => 1,
+            Dir8::Up | Dir8::Down => Offset::Zero,
+            Dir8::Left | Dir8::UpLeft | Dir8::DownLeft => Offset::Negative,
+            Dir8::Right | Dir8::UpRight | Dir8::DownRight => Offset::Positive,
         }
     }
 
-    fn y_offset(&self) -> isize {
+    fn y_offset(&self) -> Offset {
         match self {
-            Dir8::Left | Dir8::Right => 0,
-            Dir8::Up | Dir8::UpLeft | Dir8::UpRight => -1,
-            Dir8::Down | Dir8::DownLeft | Dir8::DownRight => 1,
+            Dir8::Left | Dir8::Right => Offset::Zero,
+            Dir8::Up | Dir8::UpLeft | Dir8::UpRight => Offset::Negative,
+            Dir8::Down | Dir8::DownLeft | Dir8::DownRight => Offset::Positive,
+        }
+    }
+}
+
+impl From<Dir4> for Dir8 {
+    fn from(value: Dir4) -> Self {
+        match value {
+            Dir4::Up => Dir8::Up,
+            Dir4::Down => Dir8::Down,
+            Dir4::Left => Dir8::Left,
+            Dir4::Right => Dir8::Right,
         }
     }
 }
@@ -464,78 +551,86 @@ impl Dir8 {
 }
 
 macro_rules! impl_dir_ops {
-    ($name:ident) => {
-        impl_op_ex!(+ |pos: &Pos, dir: &$name| -> Pos {
+    ($name:ident, $pos:ty) => {
+        impl_op_ex!(+ |pos: &$pos, dir: &$name| -> $pos {
             let x = match dir.x_offset() {
-                0 => pos.x(),
-                x @ ..0 => pos.x() - x.unsigned_abs(),
-                x @ 1.. => pos.x() + x.unsigned_abs(),
+                Offset::Zero => pos.x(),
+                Offset::Negative => pos.x() - 1,
+                Offset::Positive => pos.x() + 1,
             };
 
             let y = match dir.y_offset() {
-                0 => pos.y(),
-                y @ ..0 => pos.y() - y.unsigned_abs(),
-                y @ 1.. => pos.y() + y.unsigned_abs(),
+                Offset::Zero => pos.y(),
+                Offset::Negative => pos.y() - 1,
+                Offset::Positive => pos.y() + 1,
             };
 
-            Pos::from_xy(x, y)
+            <$pos>::from_xy(x, y)
         });
 
-        impl_op_ex!(- |pos: &Pos, dir: &$name| -> Pos {
+        impl_op_ex!(- |pos: &$pos, dir: &$name| -> $pos {
             let x = match dir.x_offset() {
-                0 => pos.0,
-                x @ ..0 => pos.0 + x.unsigned_abs(), // if x is -1, subtracting it means adding +1.
-                x @ 1.. => pos.0 - x.unsigned_abs(),
+                Offset::Zero => pos.x(),
+                Offset::Negative => pos.x() + 1, // if x is -1, subtracting it means adding +1.
+                Offset::Positive => pos.x() - 1,
             };
 
             let y = match dir.y_offset() {
-                0 => pos.1,
-                y @ ..0 => pos.1 + y.unsigned_abs(),
-                y @ 1.. => pos.1 - y.unsigned_abs(),
+                Offset::Zero => pos.y(),
+                Offset::Negative => pos.y() + 1,
+                Offset::Positive => pos.y() - 1,
             };
 
-            Pos::from_xy(x, y)
+            <$pos>::from_xy(x, y)
         });
 
-        impl_op_ex!(+= |pos: &mut Pos, dir: &$name| {
+        impl_op_ex!(+= |pos: &mut $pos, dir: &$name| {
             match dir.x_offset() {
-                0 => {},
-                x @ ..0 => pos.0 += x.unsigned_abs(),
-                x @ 1.. => pos.0 -= x.unsigned_abs(),
+                Offset::Zero => {},
+                Offset::Negative => pos.0 -= 1,
+                Offset::Positive => pos.0 += 1,
             }
 
             match dir.y_offset() {
-                0 => {},
-                y @ ..0 => pos.1 += y.unsigned_abs(),
-                y @ 1.. => pos.1 -= y.unsigned_abs(),
+                Offset::Zero => {},
+                Offset::Negative => pos.1 -= 1,
+                Offset::Positive => pos.1 += 1,
             }
         });
 
-        impl_op_ex!(-= |pos: &mut Pos, dir: &$name| {
+        impl_op_ex!(-= |pos: &mut $pos, dir: &$name| {
             match dir.x_offset() {
-                0 => {},
-                x @ ..0 => pos.0 -= x.unsigned_abs(),
-                x @ 1.. => pos.0 += x.unsigned_abs(),
+                Offset::Zero => {},
+                Offset::Negative => pos.0 += 1,
+                Offset::Positive => pos.0 -= 1,
             }
 
             match dir.y_offset() {
-                0 => {},
-                y @ ..0 => pos.1 -= y.unsigned_abs(),
-                y @ 1.. => pos.1 += y.unsigned_abs(),
+                Offset::Zero => {},
+                Offset::Negative => pos.1 += 1,
+                Offset::Positive => pos.1 -= 1,
             }
         });
-
-        impl Neg for $name {
-            type Output = $name;
-            fn neg(self) -> Self::Output {
-                self.behind()
-            }
-        }
     };
 }
 
-impl_dir_ops!(Dir4);
-impl_dir_ops!(Dir8);
+impl_dir_ops!(Dir4, (usize, usize));
+impl_dir_ops!(Dir8, (usize, usize));
+// [TODO] impl_dir_ops! with (isize, isize) / (i32, i32) to avoid underflow panics
+
+impl Neg for Dir4 {
+    type Output = Dir4;
+    fn neg(self) -> Self::Output {
+        self.behind()
+    }
+}
+
+impl Neg for Dir8 {
+    type Output = Dir8;
+    fn neg(self) -> Self::Output {
+        self.behind()
+    }
+}
 
 // Sadly, we can't add an `impl` like this due to Rust's orphaning rules; so we need to use a macro instead. This will
 // _probably_ be possible in at least _some_ capacity once specialization lands in stable; [FIXME] then.
