@@ -1,4 +1,4 @@
-//! A small collection of utility functions and re-exports of commonly used third-party crates.
+//! A collection of commonly used types, utility functions, and re-exports of frequently used third-party crates.
 
 pub mod grid;
 mod input;
