@@ -1,4 +1,4 @@
-use aoc_utils::Grid;
+use aoc_utils::{Grid, count_bools};
 use aoc_utils::grid::{Neighbours, Pos as Position};
 
 const DISCOVERED: u8 = 0b01;
@@ -71,11 +71,6 @@ fn count_corners(map: &Grid<char>, neighbours: &Neighbours<Position>) -> u8 {
         };
     }
 
-    macro_rules! count_bools {
-        ($bool:expr) => ($bool as u8);
-        ($bool:expr, $($others:expr),+) => ($bool as u8 + count_bools!($($others),+));
-    }
-
     // There's almost certainly a more elegant way to do this, but we can also just brute-force all combinations.
     // - Outside corners: two sides, 45-degrees apart, are *not* the same char.
     // - Inside corners: two sides, 45-degrees apart, *are* the same as this char, but the one between them is not.
@@ -88,8 +83,8 @@ fn count_corners(map: &Grid<char>, neighbours: &Neighbours<Position>) -> u8 {
     let sw = check_match!(sw);
     let nw = check_match!(nw);
 
-    let outside = count_bools!(!n && !e, !e && !s, !s && !w, !w && !n);
-    let inside = count_bools!(n && e && !ne, s && e && !se, s && w && !sw, n && w && !nw);
+    let outside = count_bools!(!n && !e, !e && !s, !s && !w, !w && !n; as u8);
+    let inside = count_bools!(n && e && !ne, s && e && !se, s && w && !sw, n && w && !nw; as u8);
 
     outside + inside
 }

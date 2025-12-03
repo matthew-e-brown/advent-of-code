@@ -8,6 +8,7 @@ use clap::{ArgAction, ArgMatches, Command, Parser, ValueHint};
 /// A single, lazily-initialized instance of the user's [CLI input][Input].
 static CLI_INPUT: LazyLock<Input> = LazyLock::new(|| Input::parse());
 
+/// General command-line format for all Advent of Code puzzle solutions.
 #[derive(Parser, Debug)]
 struct Input {
     /// The name of the file to read puzzle input from.

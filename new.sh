@@ -46,11 +46,11 @@ fi
 # Zero-pad just in case it's not already:
 DAY="$(printf '%02d' "$DAY")"
 
-if [[ ! "$DAY" =~ ^[0-2][0-9]$ ]]; then
-    >&2 echo "Day $DAY is not a number!"
+if [[ ! "$DAY" =~ ^[0-9]+$ ]]; then
+    >&2 echo "Day $DAY is not a number."
     exit 1
 elif [[ "$DAY" -lt 1 || $DAY -gt 25 ]]; then
-    >&2 echo "Day $DAY is out of range!"
+    >&2 echo "Day $DAY is out of range."
     exit 1
 fi
 
