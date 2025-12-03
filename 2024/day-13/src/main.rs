@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign, Mul, MulAssign, SubAssign};
 
 use aoc_utils::regex::Regex;
-use day_13::Rational;
+use aoc2024_13::Rational;
 
 macro_rules! println_if {
     ($cond:expr$(,)?) => {

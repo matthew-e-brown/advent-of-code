@@ -1,4 +1,4 @@
-use day_09::*;
+use aoc2024_09::*;
 
 fn main() {
     let input = aoc_utils::puzzle_input();

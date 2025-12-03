@@ -61,6 +61,112 @@ dependencies = [
 ]
 
 [[package]]
+name = "aoc2024_01"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_02"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_03"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_04"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_05"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_06"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_07"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_08"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_09"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_10"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_11"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_12"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_13"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
+name = "aoc2024_14"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+ "crossterm",
+]
+
+[[package]]
+name = "aoc2024_15"
+version = "0.1.0"
+dependencies = [
+ "aoc_utils",
+]
+
+[[package]]
 name = "aoc_utils"
 version = "0.1.0"
 dependencies = [
@@ -171,112 +277,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acdd7c62a3665c7f6830a51635d9ac9b23ed385797f70a83bb8bafe9c572ab2b"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "day-01"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-02"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-03"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-04"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-05"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-06"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-07"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-08"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-09"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-10"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-11"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-12"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-13"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
-]
-
-[[package]]
-name = "day-14"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
- "crossterm",
-]
-
-[[package]]
-name = "day-15"
-version = "0.1.0"
-dependencies = [
- "aoc_utils",
 ]
 
 [[package]]
