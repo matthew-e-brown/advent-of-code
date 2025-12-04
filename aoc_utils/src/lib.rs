@@ -24,11 +24,12 @@ pub fn threadpool() -> scoped_threadpool::Pool {
 /// # Examples
 ///
 /// ```
+/// # use aoc_utils::count_bools;
 /// let a = 5;
 /// let b = 10;
 ///
 /// assert_eq!(count_bools!(a == b, a < b, b < 20), 2);
-/// assert_eq!(count_bools!(a != b, b > a, 20 > b; as u8), 2);
+/// assert_eq!(count_bools!(a != b, b > a, 20 > b; as u8), 3u8);
 /// ```
 #[macro_export]
 macro_rules! count_bools {
