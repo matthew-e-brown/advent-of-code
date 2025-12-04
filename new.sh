@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+set -e
+
+# We want to CD relative to this script, not from PWD; lets us call
+# `../new.sh` from inside the 2025 directory, for example.
+cd "$(dirname "${BASH_SOURCE[0]:-$0}")"
+
 # Allow year to be passed on command line.
 YEAR="$1"
 if [[ -z "$YEAR" ]]; then
@@ -55,7 +61,6 @@ elif [[ "$DAY" -lt 1 || $DAY -gt 25 ]]; then
 fi
 
 # Now finally make the package:
-set -e
 cd "./$YEAR"
 cargo new --bin --name "aoc${YEAR}_${DAY}" "day-${DAY}"
 
