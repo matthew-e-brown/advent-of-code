@@ -156,11 +156,8 @@ impl<T> Grid<T> {
     }
 
     /// Returns an iterator over all (x, y) positions in this grid.
-    pub fn positions(&self) -> impl Iterator<Item = (usize, usize)> + use<T> {
-        // Copy sizes out of self to avoid capturing lifetime in opaque impl return value
-        let h = self.h;
-        let w = self.w;
-        (0..h).flat_map(move |y| (0..w).map(move |x| (x, y)))
+    pub fn positions(&self) -> Positions<Pos> {
+        Positions::new(self.size())
     }
 
     /// Checks whether or not the given position is within the bounds of this grid's size.
@@ -354,5 +351,75 @@ where
 
         writeln!(f, "Size: {}×{}", self.w, self.h)?;
         Ok(())
+    }
+}
+
+/// An iterator over all the positions of a grid.
+///
+/// This struct is usually created by the [`Grid::positions`] method:
+///
+/// ```
+/// # use aoc_utils::grid::Grid;
+/// let grid = Grid::<u32>::empty(10, 10);
+///
+/// for pos in grid.positions() {
+///     println!("Cell {pos:?} = {:?}", &grid[pos]);
+/// }
+/// ```
+///
+/// However, there may be times when it is preferable to create an instance manually with [`Positions<Idx>::new`], since
+/// that will allow you to choose the specific [`GridIndex`] type the iterator will return.
+///
+/// ```
+/// # use aoc_utils::grid::{Grid, GridIndex, Positions};
+/// let grid = Grid::<u32>::empty(10, 10);
+///
+/// # #[derive(Clone, Copy)]
+/// struct Vec2 { x: f32, y: f32 }
+/// impl GridIndex for Vec2 {
+///     /* ... */
+///     # fn x(&self) -> usize { self.x as usize }
+///     # fn y(&self) -> usize { self.y as usize }
+///     # fn from_xy(x: usize, y: usize) -> Self { Vec2 { x: x as f32, y: y as f32 } }
+/// }
+///
+/// for vec in Positions::<Vec2>::new(grid.size()) {
+///     println!("Cell at (x, y) of ({:.2}, {:.2}) = {:?}", vec.x, vec.y, &grid[vec]);
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct Positions<Idx: GridIndex> {
+    w: usize,
+    h: usize,
+    pos: Idx,
+}
+
+impl<Idx: GridIndex> Positions<Idx> {
+    /// Creates a new iterator over all the (x, y) positions within the given bounds.
+    pub fn new((w, h): (usize, usize)) -> Self {
+        Self { w, h, pos: Idx::from_xy(0, 0) }
+    }
+}
+
+impl<Idx: GridIndex> Iterator for Positions<Idx> {
+    type Item = Idx;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Check if we were left in-bounds by last iteration
+        let (curr_x, curr_y) = self.pos.to_tuple();
+        if curr_y < self.h {
+            // Tick x and x forward for next time
+            let mut next_x = curr_x + 1;
+            let mut next_y = curr_y;
+            if next_x >= self.w {
+                next_x = 0;
+                next_y += 1;
+            }
+
+            self.pos = Idx::from_xy(next_x, next_y);
+            Some(Idx::from_xy(curr_x, curr_y))
+        } else {
+            None
+        }
     }
 }
