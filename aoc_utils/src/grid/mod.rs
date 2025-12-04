@@ -156,8 +156,11 @@ impl<T> Grid<T> {
     }
 
     /// Returns an iterator over all (x, y) positions in this grid.
-    pub fn positions(&self) -> impl Iterator<Item = (usize, usize)> {
-        (0..self.h).flat_map(|y| (0..self.w).map(move |x| (x, y)))
+    pub fn positions(&self) -> impl Iterator<Item = (usize, usize)> + use<T> {
+        // Copy sizes out of self to avoid capturing lifetime in opaque impl return value
+        let h = self.h;
+        let w = self.w;
+        (0..h).flat_map(move |y| (0..w).map(move |x| (x, y)))
     }
 
     /// Checks whether or not the given position is within the bounds of this grid's size.
