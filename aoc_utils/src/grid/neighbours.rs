@@ -1,11 +1,17 @@
 //! Structures and iterators relating to the neighbours around a given cell in a two-dimensional grid.
 
+use std::iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator};
+
 use super::directions::{Dir4Iter, Dir8Iter, Direction};
 use super::{Dir4, Dir8, GridIndex};
 
-/// A representation of the neighbours around a particular cell in a [Grid][super::Grid].
+/// Helper struct giving bounds-checked access around a particular cell in a [Grid][super::Grid].
 ///
-/// This struct is created by the [`neighbours`][super::Grid::neighbours] method on the [`Grid`][super::Grid] struct.
+/// Specifically, this struct provides helper methods for accessing and iterating over the grid indices/positions (see
+/// [`GridIndex`]) which _would_ be around a given position in a grid of a given size. This struct holds no reference to
+/// the original grid. It is usually constructed by the [`neighbours`][super::Grid::neighbours] method on the
+/// [`Grid`][super::Grid] struct, but one may be constructed without a reference to a grid as long as you have a width
+/// and a height.
 #[derive(Debug, Clone, Copy)]
 pub struct Neighbours<Idx: GridIndex> {
     pos: Idx,
@@ -44,12 +50,13 @@ fn get_mask(dir: Dir8) -> u8 {
 }
 
 impl<Idx: GridIndex> Neighbours<Idx> {
-    pub(super) fn new(pos: Idx, (w, h): (usize, usize)) -> Self {
+    /// Creates a new [`Neighbours`] struct.
+    pub fn new(pos: Idx, (width, height): (usize, usize)) -> Self {
         let (x, y) = pos.to_tuple();
 
         let n = (y > 0) as u8;
-        let e = (x < w - 1) as u8;
-        let s = (y < h - 1) as u8;
+        let e = (x < width - 1) as u8;
+        let s = (y < height - 1) as u8;
         let w = (x > 0) as u8;
         let mask = (n << OFFSET_N) | (e << OFFSET_E) | (s << OFFSET_S) | (w << OFFSET_W);
 
@@ -125,20 +132,20 @@ impl<Idx: GridIndex> Neighbours<Idx> {
 
     /// Returns an iterator over the positions of the four adjacent positions around the cell. Any out-of-bounds
     /// neighbours are excluded from iteration.
-    pub fn iter_adjacent(&self) -> NeighboursAdjacent<Idx> {
-        NeighboursAdjacent(*self, Dir4::iter())
+    pub fn iter_adjacent(&self) -> IterAdjacent<Idx> {
+        IterAdjacent(*self, Dir4::iter())
     }
 
     /// Returns an iterator over the positions of all eight positions that surround the cell. Any out-of-bounds
     /// corners are excluded from iteration.
-    pub fn iter_around(&self) -> NeighboursAround<Idx> {
-        NeighboursAround(*self, Dir8::iter())
+    pub fn iter_around(&self) -> IterAround<Idx> {
+        IterAround(*self, Dir8::iter())
     }
 
     /// Returns an iterator over the positions of the four corners around the cell. Any out-of-bounds corners are
     /// excluded from iteration.
-    pub fn iter_corners(&self) -> NeighboursCorners<Idx> {
-        NeighboursCorners(*self, Dir4::iter())
+    pub fn iter_corners(&self) -> IterCorners<Idx> {
+        IterCorners(*self, Dir4::iter())
     }
 }
 
@@ -146,91 +153,53 @@ impl<Idx: GridIndex> Neighbours<Idx> {
 ///
 /// This struct is created by the [`iter_adjacent`][Neighbours::iter_adjacent] method on the [`Neighbours`] struct.
 #[derive(Debug, Clone, Copy)]
-pub struct NeighboursAdjacent<Idx: GridIndex>(Neighbours<Idx>, Dir4Iter);
+pub struct IterAdjacent<Idx: GridIndex>(Neighbours<Idx>, Dir4Iter);
 
 /// An iterator over the eight surrounding neighbours of a cell in a [Grid][super::Grid].
 ///
 /// This struct is created by the [`iter_around`][Neighbours::iter_around] method on the [`Neighbours`] struct.
 #[derive(Debug, Clone, Copy)]
-pub struct NeighboursAround<Idx: GridIndex>(Neighbours<Idx>, Dir8Iter);
+pub struct IterAround<Idx: GridIndex>(Neighbours<Idx>, Dir8Iter);
 
 /// An iterator over the four corner-neighbours of a cell in a [Grid][super::Grid].
 ///
 /// This struct is created by the [`iter_corners`][Neighbours::iter_corners] method on the [`Neighbours`] struct.
-pub struct NeighboursCorners<Idx: GridIndex>(Neighbours<Idx>, Dir4Iter);
+pub struct IterCorners<Idx: GridIndex>(Neighbours<Idx>, Dir4Iter);
 // ^works the same as NeighboursAdjacent, but rotates its directions by 45 degrees before indexing Neighbours struct
 
+macro_rules! impl_iter {
+    ($name:ident) => {
+        impl_iter!($name, dir => dir);
+    };
+    ($name:ident, $dir:ident => $map:expr) => {
+        impl<Idx: GridIndex> Iterator for $name<Idx> {
+            type Item = Idx;
 
-macro_rules! find_map {
-    ($this:ident.$next:ident) => (find_map!($this.$next, dir => dir));
-    ($this:ident.$next:ident, $dir:ident => $map:expr) => {
-        loop {
-            let $dir = $this.1.$next()?; // ? is what actually stops iteration
-            let val = $this.0.get( $map );
-            if val.is_some() {
-                return val;
+            fn next(&mut self) -> Option<Self::Item> {
+                self.1.find_map(|$dir| self.0.get($map))
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                (0, Some(self.len()))
             }
         }
+
+        impl<Idx: GridIndex> DoubleEndedIterator for $name<Idx> {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                self.1.rev().find_map(|$dir| self.0.get($map))
+            }
+        }
+
+        impl<Idx: GridIndex> ExactSizeIterator for $name<Idx> {
+            fn len(&self) -> usize {
+                self.1.len()
+            }
+        }
+
+        impl<Idx: GridIndex> FusedIterator for $name<Idx> {}
     };
 }
 
-
-impl<Idx: GridIndex> Iterator for NeighboursAdjacent<Idx> {
-    type Item = Idx;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        find_map!(self.next)
-    }
-}
-
-impl<Idx: GridIndex> Iterator for NeighboursAround<Idx> {
-    type Item = Idx;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        find_map!(self.next)
-    }
-}
-
-impl<Idx: GridIndex> Iterator for NeighboursCorners<Idx> {
-    type Item = Idx;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        find_map!(self.next, dir => dir.into_dir8().right45())
-    }
-}
-
-impl<Idx: GridIndex> DoubleEndedIterator for NeighboursAdjacent<Idx> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        find_map!(self.next_back)
-    }
-}
-
-impl<Idx: GridIndex> DoubleEndedIterator for NeighboursAround<Idx> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        find_map!(self.next_back)
-    }
-}
-
-impl<Idx: GridIndex> DoubleEndedIterator for NeighboursCorners<Idx> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        find_map!(self.next_back, dir => dir.into_dir8().right45())
-    }
-}
-
-impl<Idx: GridIndex> ExactSizeIterator for NeighboursAdjacent<Idx> {
-    fn len(&self) -> usize {
-        self.1.len()
-    }
-}
-
-impl<Idx: GridIndex> ExactSizeIterator for NeighboursAround<Idx> {
-    fn len(&self) -> usize {
-        self.1.len()
-    }
-}
-
-impl<Idx: GridIndex> ExactSizeIterator for NeighboursCorners<Idx> {
-    fn len(&self) -> usize {
-        self.1.len()
-    }
-}
+impl_iter!(IterAdjacent);
+impl_iter!(IterAround);
+impl_iter!(IterCorners, dir => dir.into_dir8().right45());

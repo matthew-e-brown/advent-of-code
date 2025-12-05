@@ -8,6 +8,7 @@
 //! associated helper methods every single time a new puzzle involves directions.
 
 use std::fmt::{self, Debug, Display};
+use std::iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator, Iterator};
 use std::ops::Neg;
 use std::str::FromStr;
 
@@ -40,7 +41,7 @@ pub trait Direction: Copy + Into<Dir8> {
     }
 
     /// Adds this direction to the given position, returning `Some` as long as the resulting position is within the
-    /// givin `(w, h)` limits.
+    /// given `(w, h)` limits.
     fn checked_add<Idx: GridIndex>(self, pos: Idx, limits: (usize, usize)) -> Option<Idx> {
         let (w, h) = limits;
         let x = pos.x().checked_add_signed(self.x_offset().as_isize())?;
@@ -49,7 +50,7 @@ pub trait Direction: Copy + Into<Dir8> {
     }
 
     /// Adds this direction to the given position `n` times, returning `Some` as long as the resulting position is
-    /// within the givin `(w, h)` limits.
+    /// within the given `(w, h)` limits.
     ///
     /// # Panics
     ///
@@ -765,6 +766,11 @@ impl Iterator for Dir4Iter {
             Some(val)
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // Return remaining amount
+        (0, Some(self.len()))
+    }
 }
 
 impl DoubleEndedIterator for Dir4Iter {
@@ -778,6 +784,15 @@ impl DoubleEndedIterator for Dir4Iter {
     }
 }
 
+impl ExactSizeIterator for Dir4Iter {
+    fn len(&self) -> usize {
+        // *Remaining* size of the iterator
+        (self.1 - self.0) as usize
+    }
+}
+
+impl FusedIterator for Dir4Iter {}
+
 impl Iterator for Dir8Iter {
     type Item = Dir8;
 
@@ -789,6 +804,10 @@ impl Iterator for Dir8Iter {
             self.0 += 1;
             Some(val)
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.len()))
     }
 }
 
@@ -803,14 +822,10 @@ impl DoubleEndedIterator for Dir8Iter {
     }
 }
 
-impl ExactSizeIterator for Dir4Iter {
-    fn len(&self) -> usize {
-        (self.1 - self.0) as usize
-    }
-}
-
 impl ExactSizeIterator for Dir8Iter {
     fn len(&self) -> usize {
         (self.1 - self.0) as usize
     }
 }
+
+impl FusedIterator for Dir8Iter {}

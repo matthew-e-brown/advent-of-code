@@ -4,7 +4,11 @@
 //! all puzzles greatly reduces code repetition. By having the implementation here, the fun programming challenge of
 //! implementing the data structure remains, but the puzzles themselves can stay focused on the actual logic.
 
+// [TODO] Add support for signed indexes to make it easier to handle falling out of bounds in a grid.
+// [TODO] Add proper tests.
+
 pub mod directions;
+pub mod iter;
 pub mod neighbours;
 
 use std::convert::Infallible;
@@ -14,6 +18,7 @@ use std::ops::{Index, IndexMut};
 use thiserror::Error;
 
 pub use self::directions::{Dir4, Dir8, Direction};
+use self::iter::{Entries, EntriesMut, Positions, Values, ValuesMut};
 pub use self::neighbours::Neighbours;
 
 /// A 2D position used to index a [Grid].
@@ -160,6 +165,27 @@ impl<T> Grid<T> {
         Positions::new(self.size())
     }
 
+    /// Returns an iterator of references to the values in this grid's cells.
+    pub fn values(&self) -> Values<'_, T> {
+        Values::new(self)
+    }
+
+    /// Returns an iterator of mutable references to the values in this grid's cells.
+    pub fn values_mut(&mut self) -> ValuesMut<'_, T> {
+        ValuesMut::new(self)
+    }
+
+    /// Returns an iterator that yields references to this grid's values alongside their (x, y) positions in the grid.
+    pub fn entries(&self) -> Entries<'_, T> {
+        Entries::new(self)
+    }
+
+    /// Returns an iterator that yields mutable references to this grid's values alongside their (x, y) positions in the
+    /// grid.
+    pub fn entries_mut(&mut self) -> EntriesMut<'_, T> {
+        EntriesMut::new(self)
+    }
+
     /// Checks whether or not the given position is within the bounds of this grid's size.
     pub fn contains<Idx: GridIndex>(&self, pos: Idx) -> bool {
         pos.x() < self.w && pos.y() < self.h
@@ -208,7 +234,7 @@ impl<T> Grid<T> {
     /// Gets a reference to the item in front of the given position, in the given direction.
     ///
     /// To access the neighbouring _positions themselves_ (not just references), see [`Grid::neighbours`].
-    pub fn get_neighbour<Dir: Direction, Idx: GridIndex>(&self, pos: Idx, dir: Dir) -> Option<&T> {
+    pub fn get_neighbour<Idx: GridIndex, Dir: Direction>(&self, pos: Idx, dir: Dir) -> Option<&T> {
         let pos = dir.checked_add(pos, self.size())?;
         // SAFETY: `checked_add` checks bounds.
         Some(unsafe { self.get_unchecked(pos) })
@@ -217,7 +243,7 @@ impl<T> Grid<T> {
     /// Gets a mutable reference to the item in front of the given position, in the given direction.
     ///
     /// To access the neighbouring _positions themselves_ (not just references), see [`Grid::neighbours`].
-    pub fn get_neighbour_mut<Dir: Direction, Idx: GridIndex>(&mut self, pos: Idx, dir: Dir) -> Option<&mut T> {
+    pub fn get_neighbour_mut<Idx: GridIndex, Dir: Direction>(&mut self, pos: Idx, dir: Dir) -> Option<&mut T> {
         let pos = dir.checked_add(pos, self.size())?;
         // SAFETY: `checked_add` checks bounds.
         Some(unsafe { self.get_unchecked_mut(pos) })
@@ -251,13 +277,12 @@ impl<T> Grid<T> {
     /// Creates a new grid by running each character of the source input through a mapping function.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
-    pub fn from_lines_map<I, S, F>(lines: I, mut f: F) -> Result<Self, ParseGridError>
+    pub fn from_lines_map<I, S>(lines: I, mut f: impl FnMut(char, (usize, usize)) -> T) -> Result<Self, ParseGridError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
-        F: FnMut(char, (usize, usize)) -> T,
     {
-        match Self::try_from_lines_map::<Infallible, I, S, _>(lines, move |x, p| Ok(f(x, p))) {
+        match Self::try_from_lines_map::<I, S, Infallible>(lines, move |x, p| Ok(f(x, p))) {
             Ok(grid) => Ok(grid),
             Err(TryParseGridError::RowSize(n)) => Err(ParseGridError::RowSize(n)),
             Err(TryParseGridError::MapFnError(_)) => unreachable!(), // map_fn never returns Err
@@ -267,11 +292,13 @@ impl<T> Grid<T> {
     /// Creates a new grid by attempting to call the provided mapping function on each character of the source input.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
-    pub fn try_from_lines_map<E, I, S, F>(lines: I, mut f: F) -> Result<Self, TryParseGridError<E>>
+    pub fn try_from_lines_map<I, S, E>(
+        lines: I,
+        mut f: impl FnMut(char, (usize, usize)) -> Result<T, E>,
+    ) -> Result<Self, TryParseGridError<E>>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
-        F: FnMut(char, (usize, usize)) -> Result<T, E>,
     {
         let mut lines = lines.into_iter();
 
@@ -329,6 +356,24 @@ impl<T, I: GridIndex> IndexMut<I> for Grid<T> {
     }
 }
 
+impl<'a, T> IntoIterator for &'a Grid<T> {
+    type Item = (Pos, &'a T);
+    type IntoIter = Entries<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Entries::new(self)
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut Grid<T> {
+    type Item = (Pos, &'a mut T);
+    type IntoIter = EntriesMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        EntriesMut::new(self)
+    }
+}
+
 impl<T> Debug for Grid<T>
 where
     T: Debug,
@@ -351,75 +396,5 @@ where
 
         writeln!(f, "Size: {}×{}", self.w, self.h)?;
         Ok(())
-    }
-}
-
-/// An iterator over all the positions of a grid.
-///
-/// This struct is usually created by the [`Grid::positions`] method:
-///
-/// ```
-/// # use aoc_utils::grid::Grid;
-/// let grid = Grid::<u32>::empty(10, 10);
-///
-/// for pos in grid.positions() {
-///     println!("Cell {pos:?} = {:?}", &grid[pos]);
-/// }
-/// ```
-///
-/// However, there may be times when it is preferable to create an instance manually with [`Positions<Idx>::new`], since
-/// that will allow you to choose the specific [`GridIndex`] type the iterator will return.
-///
-/// ```
-/// # use aoc_utils::grid::{Grid, GridIndex, Positions};
-/// let grid = Grid::<u32>::empty(10, 10);
-///
-/// # #[derive(Clone, Copy)]
-/// struct Vec2 { x: f32, y: f32 }
-/// impl GridIndex for Vec2 {
-///     /* ... */
-///     # fn x(&self) -> usize { self.x as usize }
-///     # fn y(&self) -> usize { self.y as usize }
-///     # fn from_xy(x: usize, y: usize) -> Self { Vec2 { x: x as f32, y: y as f32 } }
-/// }
-///
-/// for vec in Positions::<Vec2>::new(grid.size()) {
-///     println!("Cell at (x, y) of ({:.2}, {:.2}) = {:?}", vec.x, vec.y, &grid[vec]);
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub struct Positions<Idx: GridIndex> {
-    w: usize,
-    h: usize,
-    pos: Idx,
-}
-
-impl<Idx: GridIndex> Positions<Idx> {
-    /// Creates a new iterator over all the (x, y) positions within the given bounds.
-    pub fn new((w, h): (usize, usize)) -> Self {
-        Self { w, h, pos: Idx::from_xy(0, 0) }
-    }
-}
-
-impl<Idx: GridIndex> Iterator for Positions<Idx> {
-    type Item = Idx;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // Check if we were left in-bounds by last iteration
-        let (curr_x, curr_y) = self.pos.to_tuple();
-        if curr_y < self.h {
-            // Tick x and x forward for next time
-            let mut next_x = curr_x + 1;
-            let mut next_y = curr_y;
-            if next_x >= self.w {
-                next_x = 0;
-                next_y += 1;
-            }
-
-            self.pos = Idx::from_xy(next_x, next_y);
-            Some(Idx::from_xy(curr_x, curr_y))
-        } else {
-            None
-        }
     }
 }
