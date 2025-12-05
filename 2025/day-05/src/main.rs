@@ -23,10 +23,10 @@ fn main() {
 
     // Now that the ranges are all merged, we should be able to do a simple binary search for range starts.
 
-    let mut num_fresh = 0usize;
+    let mut fresh_count = 0usize;
     for fruit in fruits {
         if let Some(i) = search_ranges(&ranges, fruit) {
-            num_fresh += 1;
+            fresh_count += 1;
             if aoc_utils::verbosity() > 0 {
                 println!("Fruit {fruit:width$}: fits into range #{i:3} ({:width$})", &ranges[i]);
             }
@@ -37,7 +37,15 @@ fn main() {
         }
     }
 
-    println!("Number of fresh fruit (part 1): {num_fresh}");
+    // Aha! Thinking ahead pays off. Part 2 is dead simple now that we've already sorted and merged our ranges! :D
+    let mut total_fresh = 0usize;
+    for &range in &ranges {
+        // Range size is +1 because they're inclusive.
+        total_fresh += (range.end - range.start + 1) as usize;
+    }
+
+    println!("Number of input fresh fruits from input (part 1): {fresh_count}");
+    println!("Total number of fresh fruit across all ranges (part 2): {total_fresh}");
 }
 
 /// An inclusive range.
