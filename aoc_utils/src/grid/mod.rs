@@ -277,12 +277,13 @@ impl<T> Grid<T> {
     /// Creates a new grid by running each character of the source input through a mapping function.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
-    pub fn from_lines_map<I, S>(lines: I, mut f: impl FnMut(char, (usize, usize)) -> T) -> Result<Self, ParseGridError>
+    pub fn from_lines_map<I, S, F>(lines: I, mut f: F) -> Result<Self, ParseGridError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
+        F: FnMut(char, (usize, usize)) -> T,
     {
-        match Self::try_from_lines_map::<I, S, Infallible>(lines, move |x, p| Ok(f(x, p))) {
+        match Self::try_from_lines_map::<I, S, _, Infallible>(lines, move |x, p| Ok(f(x, p))) {
             Ok(grid) => Ok(grid),
             Err(TryParseGridError::RowSize(n)) => Err(ParseGridError::RowSize(n)),
             Err(TryParseGridError::MapFnError(_)) => unreachable!(), // map_fn never returns Err
@@ -292,13 +293,11 @@ impl<T> Grid<T> {
     /// Creates a new grid by attempting to call the provided mapping function on each character of the source input.
     ///
     /// The mapping function is passed both the source character and the (x, y) position at which it appears.
-    pub fn try_from_lines_map<I, S, E>(
-        lines: I,
-        mut f: impl FnMut(char, (usize, usize)) -> Result<T, E>,
-    ) -> Result<Self, TryParseGridError<E>>
+    pub fn try_from_lines_map<I, S, F, E>(lines: I, mut f: F) -> Result<Self, TryParseGridError<E>>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
+        F: FnMut(char, (usize, usize)) -> Result<T, E>,
     {
         let mut lines = lines.into_iter();
 
@@ -333,10 +332,41 @@ impl<T> Grid<T> {
     /// Creates a new [Grid] with the same size as this one by applying a mapping function to each element.
     pub fn map<B, F>(&self, mut f: F) -> Grid<B>
     where
-        F: FnMut(&T, (usize, usize)) -> B,
+        F: FnMut(&T) -> B,
     {
-        let buf = self.positions().map(|pos| f(&self[pos], pos)).collect::<Box<[B]>>();
-        Grid { buf, w: self.w, h: self.h }
+        self.try_map::<B, _, Infallible>(move |x| Ok(f(x))).unwrap()
+    }
+
+    /// Creates a new [Grid] with the same size as this one by applying a mapping function to each element and its (x,
+    /// y) position.
+    pub fn map_entries<B, F>(&self, mut f: F) -> Grid<B>
+    where
+        F: FnMut(Pos, &T) -> B,
+    {
+        self.try_map_entries::<B, _, Infallible>(move |pos, item| Ok(f(pos, item)))
+            .unwrap()
+    }
+
+    /// Attempts to create a new [Grid] by applying a mapping function to all elements. If any fail,
+    pub fn try_map<B, F, E>(&self, f: F) -> Result<Grid<B>, E>
+    where
+        F: FnMut(&T) -> Result<B, E>,
+    {
+        let buf = self.values().map(f).collect::<Result<Box<[B]>, E>>()?;
+        debug_assert!(buf.len() == self.buf.len(), "values iterator should yield all buffer elements");
+        Ok(Grid { buf, w: self.w, h: self.h })
+    }
+
+    pub fn try_map_entries<B, F, E>(&self, mut f: F) -> Result<Grid<B>, E>
+    where
+        F: FnMut(Pos, &T) -> Result<B, E>,
+    {
+        let buf = self
+            .entries()
+            .map(move |(pos, item)| f(pos, item))
+            .collect::<Result<Box<[B]>, E>>()?;
+        debug_assert!(buf.len() == self.buf.len(), "values iterator should yield all buffer elements");
+        Ok(Grid { buf, w: self.w, h: self.h })
     }
 }
 
@@ -379,22 +409,25 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Grid:")?;
+        writeln!(f, "Grid({}×{}):", self.width(), self.height())?;
         for y in 0..self.height() {
             for x in 0..self.width() {
-                if let Some(width) = f.width() {
-                    write!(f, "{:width$?}", &self[(x, y)], width = width)?;
-                    if x < self.width() - 1 && width > 0 {
+                if let Some(w) = f.width() {
+                    write!(f, "{:w$?}", &self[(x, y)])?;
+                    // If a width >1 was specified, put spaces between them.
+                    if x < self.width() - 1 && w > 1 {
                         f.write_char(' ')?;
                     }
                 } else {
                     write!(f, "{:?}", &self[(x, y)])?;
                 }
             }
-            writeln!(f)?;
+
+            if y < self.height() - 1 {
+                writeln!(f)?;
+            }
         }
 
-        writeln!(f, "Size: {}×{}", self.w, self.h)?;
         Ok(())
     }
 }
