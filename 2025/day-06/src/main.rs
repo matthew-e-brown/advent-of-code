@@ -1,4 +1,12 @@
+use aoc2025_06::Worksheet;
+
 fn main() {
+    let input = aoc_utils::puzzle_input();
+    let sheet = Worksheet::from_input(input).expect("puzzle input should be valid");
+
+    println!("{sheet:#?}");
+
+    /*
     let input = aoc_utils::puzzle_input();
 
     let line_count = input.lines().count();
@@ -59,4 +67,5 @@ fn main() {
     assert_eq!(op_count, p, "puzzle input should have same number of terms and operators");
 
     println!("Grand total of all cephalopod problem answers (part 1): {grand_total}");
+    */
 }
