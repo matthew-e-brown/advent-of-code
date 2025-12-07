@@ -1,18 +1,16 @@
-#![allow(unused)]
-
 use std::fmt::Display;
 use std::str::FromStr;
 
 /// A copy of the cephalopod's worksheet, with additional metadata associated to the column.
 #[derive(Debug, Clone)]
-pub struct Worksheet<'w> {
+pub struct Worksheet<'a> {
     /// The full input text, split by line.
     ///
     /// Does not include the final line of operators.
-    raw_terms: Vec<&'w str>,
+    raw_lines: Vec<&'a str>,
 
-    /// Information about the columns in `raw_terms`.
-    col_data: Vec<ColumnData>,
+    /// Information about the columns in `raw_lines`.
+    column_data: Vec<ColumnData>,
 }
 
 /// Information used by a [Worksheet] to index into its lines of input.
@@ -21,20 +19,23 @@ struct ColumnData {
     /// Offset into the line where this column starts.
     start: usize,
     /// How wide this column is.
+    ///
+    /// Width is stored instead of an `end` index to keep the struct size down, since there can be thousands of columns
+    /// per input, and each one is very narrow. Storing a whole second `usize` for that is probably overkill.
     width: u8,
     /// The operator at the bottom of this column.
-    operator: Op,
+    operator: Operator,
 }
 
 /// An operator in a cephalopod problem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Op {
+pub enum Operator {
     Add,
     Mul,
 }
 
-impl<'w> Worksheet<'w> {
-    pub fn from_input(input: &'w str) -> Result<Self, &'static str> {
+impl<'a> Worksheet<'a> {
+    pub fn from_input(input: &'a str) -> Result<Self, &'static str> {
         // Our parsing routines don't specifically depend on text being ASCII, but we do rely on every character being
         // exactly one byte in size. It's just easier this way.
         if !input.is_ascii() {
@@ -50,16 +51,65 @@ impl<'w> Worksheet<'w> {
 
         // Next, figure out where the columns are split.
         let op_line = lines.pop().unwrap();
-        let col_data = parse_operator_line(op_line)?;
+        let column_data = parse_operator_line(op_line)?;
 
         // That's all we really need to do to parse things, but it can't hurt to quickly double check that the columns
         // actually are the correct length and have whitespace between them:
-        verify_line_offsets(&col_data, op_line)?;
+        verify_line_offsets(&column_data, op_line)?;
         for &line in &lines {
-            verify_line_offsets(&col_data, line)?;
+            verify_line_offsets(&column_data, line)?;
         }
 
-        Ok(Self { raw_terms: lines, col_data })
+        Ok(Self { raw_lines: lines, column_data })
+    }
+
+    /// Returns the number of problems in this worksheet.
+    pub fn len(&self) -> usize {
+        self.column_data.len()
+    }
+
+    /// Gets the operator used for problem number `i`.
+    pub fn operator(&self, i: usize) -> Operator {
+        self.column_data[i].operator
+    }
+
+    /// Gets all the terms for problem number `i`, with digits interpreted in standard reading order, left-to-right.
+    ///
+    /// There are guaranteed to be at least two terms.
+    pub fn terms_across(&self, i: usize) -> impl Iterator<Item = u64> {
+        let ColumnData { start, width, .. } = self.column_data[i];
+        let width = width as usize;
+        self.raw_lines.iter().map(move |line| {
+            line[start..start + width]
+                .trim()
+                .parse::<u64>()
+                .expect("puzzle input should contain valid u64s")
+        })
+    }
+
+    /// Gets all the terms for problem number `i`, with digits interpreted in top-down order.
+    ///
+    /// There are guaranteed to be at least two terms.
+    pub fn terms_down(&self, i: usize) -> impl Iterator<Item = u64> {
+        let ColumnData { start, width, .. } = self.column_data[i];
+        let width = width as usize;
+        let num_terms = self.raw_lines.len();
+        // Each term `j` is made up of the digits from left to right of each of the columns. Get all the digits from
+        // column `j` of each of our `num_terms` terms. Empty columns get skipped.
+        (0..width).map(move |j| {
+            let digits = (0..num_terms)
+                .filter_map(|i| {
+                    let bytes = self.raw_lines[i].as_bytes();
+                    let digit = bytes[start + j];
+                    match digit {
+                        b'0'..=b'9' => Some(digit - b'0'),
+                        b' ' => None,
+                        _ => panic!("puzzle terms should contain only ASCII digits"),
+                    }
+                })
+                .rev();
+            concat_digits(digits)
+        })
     }
 }
 
@@ -72,12 +122,14 @@ fn parse_operator_line(mut line: &str) -> Result<Vec<ColumnData>, &'static str> 
     let mut start = 0;
     while start < line.len() {
         // Each column should start with a valid operator. Each operator *should* only be one column, but it doesn't
-        // hurt to allow for wider ones! :D
+        // hurt to allow for wider ones! :D (actually, just kidding: if we allowed operators to only be 1 character
+        // wide, we could do this much simpler by simply finding all `char_indices()` which were not whitespace and
+        // using those directly... but instead, we need to scan chunk by chunk. Oh well!!)
         //
         // We can figure out where the operator ends by looking for the next space character. If there are no more
         // spaces, the operator takes up the remaining chunk of the line.
         let op_end = line[start..].find(|c| c == ' ').map(|i| start + i).unwrap_or(line.len());
-        let operator = line[start..op_end].parse::<Op>()?;
+        let operator = line[start..op_end].parse::<Operator>()?;
 
         // Next, we need to know how wide the column is. We can figure that out by looking for the start of the next
         // column; the first *non-space* character. If there are no more non-space characters, then this operator was
@@ -119,22 +171,35 @@ fn verify_line_offsets(data: &[ColumnData], line: &str) -> Result<(), &'static s
     Ok(())
 }
 
-impl Display for Op {
+/// Takes an iterator of digits and squooshes them into a single number.
+///
+/// Digits should be in least- to most-significant order.
+fn concat_digits(digits: impl Iterator<Item = u8>) -> u64 {
+    let mut value = 0;
+    let mut power = 1;
+    for d in digits {
+        value += (d as u64) * power;
+        power *= 10;
+    }
+    value
+}
+
+impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Op::Add => "+",
-            Op::Mul => "*",
+            Operator::Add => "+",
+            Operator::Mul => "*",
         })
     }
 }
 
-impl FromStr for Op {
+impl FromStr for Operator {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "+" => Ok(Op::Add),
-            "*" => Ok(Op::Mul),
+            "+" => Ok(Operator::Add),
+            "*" => Ok(Operator::Mul),
             _ => Err("encountered invalid operator"),
         }
     }
