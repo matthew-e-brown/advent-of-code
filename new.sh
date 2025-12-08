@@ -49,16 +49,19 @@ if [[ -z "$DAY" ]]; then
     fi
 fi
 
-# Zero-pad just in case it's not already:
-DAY="$(printf '%02d' "$DAY")"
+# Strip zero-padding to do comparisons (otherwise, they'd be octal):
+DAY="${DAY##*0}"
 
 if [[ ! "$DAY" =~ ^[0-9]+$ ]]; then
     >&2 echo "Day $DAY is not a number."
     exit 1
-elif [[ "$DAY" -lt 1 || $DAY -gt 25 ]]; then
+elif [[ "$DAY" -lt 1 || "$DAY" -gt 25 ]]; then
     >&2 echo "Day $DAY is out of range."
     exit 1
 fi
+
+# Re-apply zero padding:
+DAY="$(printf '%02d' "$DAY")"
 
 # Now finally make the package:
 cd "./$YEAR"
