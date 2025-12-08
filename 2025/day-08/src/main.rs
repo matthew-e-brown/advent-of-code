@@ -14,7 +14,7 @@ use aoc_utils::clap;
 #[derive(Debug, clap::Parser)]
 #[command(disable_help_flag = true)]
 struct Args {
-    /// Find the closest `n` pairs of junction boxes and connect them into circuits.
+    /// For part 1, find the `n` closest pairs of junction boxes and connect them into circuits.
     ///
     /// For small inputs (< 50 junction boxes), the default is 10 (to match the example input). For larger inputs, the
     /// default is to connect the same number of pairs as there are junction boxes in the input.
@@ -74,39 +74,71 @@ fn main() {
     // convert our edge-list into a bunch of adjacency lists, and delete those unneeded edges now.
 
     let mut graph = CircuitGraph::new();
+    let mut pairs_connected = 0usize;
+    let mut largest_product = None;
+    let mut final_pair = None;
 
-    for p in 0..closest_n {
-        let Some(Reverse(pair)) = closest_pairs.pop() else {
-            panic!("Invalid puzzle input: not enough junction boxes to create {closest_n} pairs!");
-        };
+    while let Some(Reverse(pair)) = closest_pairs.pop() {
+        let p = pairs_connected + 1;
 
         if aoc_utils::verbosity() >= 2 {
             let JunctionPair { dist, i, j } = pair;
             let ji = junctions[i as usize];
             let jj = junctions[j as usize];
-            let p = p + 1;
-            println!("#{p} closest pair: {ji:5} and {jj:5} (#{i:4} and #{j:4}), sq. dist = {dist}");
+            println!("Closest pair #{p}: {ji:>17} and {jj:<17} (#{i:4} and #{j:4}), sq. dist = {dist}");
         }
 
         graph.add_edge(pair);
+        pairs_connected += 1;
+
+        if pairs_connected == closest_n {
+            // Now that we've done the first `n`, find the largest component sizes for part 1. Once we've written that
+            // down, keep going for part 2!
+            let mut largest_circuits = graph.component_sizes().collect::<Vec<_>>();
+
+            if aoc_utils::verbosity() >= 1 {
+                println!("\nCircuits after joining the closest {closest_n} pairs (ID, size):\n{largest_circuits:?}");
+            }
+            if aoc_utils::verbosity() >= 2 {
+                println!();
+            }
+
+            largest_circuits.sort_by_key(|&(_, size)| Reverse(size));
+            largest_product = Some(
+                largest_circuits
+                    .into_iter()
+                    .take(LARGEST_M)
+                    .map(|(_, size)| size)
+                    .reduce(|a, c| a * c)
+                    .unwrap_or(0),
+            );
+        } else if pairs_connected > closest_n && graph.num_nodes() == junctions.len() && graph.num_components() == 1 {
+            // Now we're in the second phase, we want to stop once all nodes appear in the final graph
+            if aoc_utils::verbosity() >= 1 {
+                let JunctionPair { i, j, .. } = pair;
+                let ji = junctions[i as usize];
+                let jj = junctions[j as usize];
+                println!("\nPair #{p} was last needed to create one circuit: {ji} and {jj} (#{i:4} and #{j:4})\n");
+            }
+
+            final_pair = Some(pair);
+            break;
+        }
     }
 
-    // We're done with the rest of these edges now.
-    drop(closest_pairs);
+    let Some(largest_product) = largest_product else {
+        panic!("Invalid puzzle input: not enough junction boxes provided to create {closest_n} pairs.");
+    };
 
-    let largest_circuits = graph.component_sizes();
-
-    if aoc_utils::verbosity() >= 1 {
-        println!("Circuits (ID, Size): {largest_circuits:?}\n");
-    }
-
-    let largest_product = largest_circuits
-        .into_iter()
-        .take(LARGEST_M)
-        .map(|(_, size)| size)
-        .fold(1, |a, c| a * c);
+    // This one is safe to unwrap, because there will *always* be enough to get things down to one component: in the
+    // worst case, you'd connect every single pair. The challenge of part 2 is finding out when it happens early.
+    let final_pair = final_pair.unwrap();
+    let final_i = &junctions[final_pair.i as usize];
+    let final_j = &junctions[final_pair.j as usize];
+    let final_x_product = (final_i.x as u64) * (final_j.x as u64);
 
     println!("Product of the largest {LARGEST_M} circuits' sizes (part 1): {largest_product}");
+    println!("Product of final pair of junction boxes' X-coordinates (part 2): {final_x_product}");
 }
 
 
@@ -153,11 +185,17 @@ impl FromStr for Junction {
 
 impl Display for Junction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Alignment;
+
         let Junction { x, y, z } = self;
-        if let Some(w) = f.width() {
-            write!(f, "{x:>w$},{y:>w$},{z:>w$}")
-        } else {
-            write!(f, "{x},{y},{z}")
+        let str = format!("{x},{y},{z}");
+
+        match (f.width(), f.align()) {
+            (Some(w), Some(Alignment::Left)) => write!(f, "{str:<w$}"),
+            (Some(w), Some(Alignment::Right)) => write!(f, "{str:>w$}"),
+            (Some(w), Some(Alignment::Center)) => write!(f, "{str:^w$}"),
+            (Some(w), None) => write!(f, "{str:w$}"),
+            (None, _) => write!(f, "{str}"),
         }
     }
 }
@@ -194,12 +232,16 @@ impl PartialOrd for JunctionPair {
 }
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 struct CircuitGraph {
     // so much heap allocation... this thing is gonna be enormous!
     /// The nodes of this graph.
     nodes: HashMap<u32, Node, AHashState>,
 
     /// The weight (distance) of each edge.
+    ///
+    /// This is not actually used for either part of this puzzle. But it was added during Part 1 in anticipation for
+    /// Part 2, and I may as well keep it! It'll be good for future reference.
     edge_weights: HashMap<(u32, u32), u64, AHashState>,
 
     /// A "map" from component index/label to component size.
@@ -207,6 +249,10 @@ struct CircuitGraph {
     /// A size of zero means that that component has been deleted, and that this index may be re-used for a new
     /// component.
     component_sizes: Vec<u64>,
+
+    /// An *O*(1)-accessible component count. Avoids having to iterate through `component_sizes` and filter out the zero
+    /// values.
+    num_components: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -217,12 +263,14 @@ struct Node {
     adj: Vec<u32>,
 }
 
+#[allow(unused)]
 impl CircuitGraph {
     pub fn new() -> Self {
         Self {
             nodes: Default::default(),
             edge_weights: Default::default(),
             component_sizes: Default::default(),
+            num_components: 0,
         }
     }
 
@@ -231,6 +279,7 @@ impl CircuitGraph {
     ///
     /// [`self.component_sizes`]: Self::component_sizes
     fn new_component(&mut self, count: u64) -> usize {
+        self.num_components += 1;
         let len = self.component_sizes.len();
         if let Some(i) = (0..len).find(|&i| self.component_sizes[i] == 0) {
             self.component_sizes[i] = count;
@@ -241,10 +290,15 @@ impl CircuitGraph {
         }
     }
 
+    /// Gets the number of unique nodes that are currently in this graph.
+    pub fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+
     /// Adds a new node with no edges to this graph.
-    #[allow(unused)] // Not actually needed for this challenge, but can't hurt to have.
     pub fn add_node(&mut self, i: u32) {
         if !self.nodes.contains_key(&i) {
+            // New nodes are never in an existing component
             let cmp_idx = self.new_component(1);
             self.nodes.insert(i, Node { cmp: cmp_idx, adj: vec![] });
         }
@@ -316,6 +370,15 @@ impl CircuitGraph {
                 self.add_edge_weight(i, j, dist);
             },
         }
+
+        if aoc_utils::verbosity() >= 4 {
+            println!(
+                "    Graph has {} nodes and {} components. Components: {:?}",
+                self.nodes.len(),
+                self.num_components,
+                self.component_sizes,
+            );
+        }
     }
 
     /// Adds an edge's weight to [`self.edge_weights`]. Ensures that `j < i` before inserting.
@@ -371,19 +434,18 @@ impl CircuitGraph {
                 stack.extend(&node.adj);
             }
         }
+
+        self.num_components -= 1;
     }
 
-    /// Gets a sorted list of all the components' IDs and their sizes.
-    pub fn component_sizes(&self) -> Vec<(usize, u64)> {
-        let mut sizes = self
-            .component_sizes
-            .iter()
-            .copied()
-            .enumerate()
-            .filter(|(_, size)| *size != 0)
-            .collect::<Vec<_>>();
-        sizes.sort_by_key(|(_, size)| Reverse(*size));
-        sizes
+    /// Gets an iterator of all the components' IDs and their sizes in this graph.
+    pub fn component_sizes(&self) -> impl Iterator<Item = (usize, u64)> {
+        self.component_sizes.iter().copied().enumerate().filter(|(_, size)| *size != 0)
+    }
+
+    /// Gets the number of components in this graph.
+    pub fn num_components(&self) -> usize {
+        self.num_components
     }
 }
 
@@ -391,29 +453,3 @@ impl CircuitGraph {
 fn minmax<T: Ord>(a: T, b: T) -> [T; 2] {
     if a <= b { [a, b] } else { [b, a] }
 }
-
-/*
-/// Runs a [Flood Fill](https://stackoverflow.com/a/1348995/10549827) on an edge-list of a graph to determine the number
-/// and size of the connected components within the graph.
-fn flood_fill(edges: &[JunctionPair]) {
-    // This is basically just a standard simple/connected graph traversal, but:
-    //
-    // - In addition to keeping track of visited nodes, we need to track which label we've assigned them.
-    // - We need to ensure that we go through *all* nodes; we don't just stop once we hit the end of a given component.
-    //
-    // We'll label each component with a simple counter. For efficiency, we can make that counter an index into a vector
-    // that keeps track of the size of each component. That'll let us know how large each component is without needing
-    // to traverse the entire graph a second time.
-
-    let mut labels = HashMap::<u32, usize, ahash::RandomState>::default();
-    let mut sizes = Vec::new();
-
-    for &JunctionPair { i, j, .. } in edges {
-        // - Are either of these vertices already labelled?
-        // - If one is labelled, then the other joins its component and receives its label.
-        // - If neither are labelled, this is a new component; push a fresh size into the list and label them both.
-        // - If both are already labelled, their two components need to be merged:
-        //   -
-    }
-}
- */
