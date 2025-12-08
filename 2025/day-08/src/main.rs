@@ -16,7 +16,8 @@ use aoc_utils::clap;
 struct Args {
     /// Find the closest `n` pairs of junction boxes and connect them into circuits.
     ///
-    /// For small inputs (< 50 junction boxes), the default is 10. For larger inputs, the default is 1000.
+    /// For small inputs (< 50 junction boxes), the default is 10 (to match the example input). For larger inputs, the
+    /// default is to connect the same number of pairs as there are junction boxes in the input.
     #[arg(short = 'n')]
     closest_n: Option<usize>,
 
@@ -24,12 +25,15 @@ struct Args {
     help: (),
 }
 
+/// For part 1, after connecting the *n* closest pairs, we want to find the *m* largest circuits.
+const LARGEST_M: usize = 3;
+
 fn main() {
     let input = aoc_utils::puzzle_input();
     let junctions = input.lines().map(|line| line.parse::<Junction>().unwrap()).collect::<Vec<_>>();
 
     let Args { closest_n, .. } = aoc_utils::parse_puzzle_args::<Args>();
-    let closest_n = closest_n.unwrap_or(if junctions.len() < 50 { 10 } else { 1000 });
+    let closest_n = closest_n.unwrap_or(if junctions.len() < 50 { 10 } else { junctions.len() });
 
     // This is the sort of puzzle that just screams, "there must be some key insight that will transform this problem
     // into some existing problem with a known, elegant algorithm!" But... it actually doesn't take that long to just
@@ -51,15 +55,6 @@ fn main() {
             closest_pairs.push(Reverse(JunctionPair { dist, i, j }));
         }
     }
-
-    // Piped to stdout, this produces an 11.44 MiB text file containing a lookup table of all 1,000,000 distances in
-    // just less than a second. Just a little bit overkill... lol.
-    /* let distances = aoc_utils::Grid::from_fn(junctions.len(), junctions.len(), |(i, j)| {
-        let a = &junctions[i];
-        let b = &junctions[j];
-        a.dist_sq(b)
-    });
-    println!("{distances:>11?}"); */
 
     // The next question becomes: now that I have this that sorted structure, how do I actually keep track of the
     // circuit layout between them?
@@ -90,7 +85,7 @@ fn main() {
             let ji = junctions[i as usize];
             let jj = junctions[j as usize];
             let p = p + 1;
-            println!("#{p:>4} closest pair: {ji:5} and {jj:5} ({i:4} and {j:4}), sq. dist = {dist:11}");
+            println!("#{p} closest pair: {ji:5} and {jj:5} (#{i:4} and #{j:4}), sq. dist = {dist}");
         }
 
         graph.add_edge(pair);
@@ -105,15 +100,13 @@ fn main() {
         println!("Circuits (ID, Size): {largest_circuits:?}\n");
     }
 
-    const LARGEST_N: usize = 3;
-
     let largest_product = largest_circuits
         .into_iter()
-        .take(LARGEST_N)
+        .take(LARGEST_M)
         .map(|(_, size)| size)
         .fold(1, |a, c| a * c);
 
-    println!("Product of the largest {LARGEST_N} circuits' sizes (part 1): {largest_product}");
+    println!("Product of the largest {LARGEST_M} circuits' sizes (part 1): {largest_product}");
 }
 
 
@@ -279,6 +272,11 @@ impl CircuitGraph {
                 self.nodes.insert(i, Node { cmp: cmp_idx, adj: vec![j] });
                 self.nodes.insert(j, Node { cmp: cmp_idx, adj: vec![i] });
                 self.add_edge_weight(i, j, dist);
+
+                if aoc_utils::verbosity() >= 3 {
+                    println!("    {i} and {j} not connected yet.");
+                    println!("    Added {i} and {j} to new component #{cmp_idx}.")
+                }
             },
             // One is in the graph, and the other is not: the existing node has the other added to its adjacency list,
             // and a new node is created for the missing one, with the same component index. That component then gets
@@ -289,9 +287,18 @@ impl CircuitGraph {
                 self.nodes.insert(not_found, Node { cmp: cmp_idx, adj: vec![found] });
                 self.component_sizes[cmp_idx] += 1;
                 self.add_edge_weight(i, j, dist);
+
+                if aoc_utils::verbosity() >= 3 {
+                    println!("    {found} was in graph in component #{cmp_idx}, but {not_found} as not.");
+                    println!("    Added {not_found} to component #{cmp_idx}.");
+                }
             },
             // Both are already in the same component: nothing happens.
-            (Ok(node_i), Ok(node_j)) if node_i.cmp == node_j.cmp => {},
+            (Ok(node_i), Ok(node_j)) if node_i.cmp == node_j.cmp => {
+                if aoc_utils::verbosity() >= 3 {
+                    println!("    {i} and {j} already connected in component #{}.", node_j.cmp);
+                }
+            },
             // Both are in the graph, but not in the same component: the two components need to be merged. Neither one
             // gets bigger before the merge takes place, since both were already present.
             (Ok(node_i), Ok(node_j)) => {
@@ -300,6 +307,11 @@ impl CircuitGraph {
                 node_j.adj.push(i);
                 let cmp_i = node_i.cmp;
                 let cmp_j = node_j.cmp;
+
+                if aoc_utils::verbosity() >= 3 {
+                    println!("    {i} and {j} in graph but not in same component.");
+                }
+
                 self.merge_components((i, cmp_i), (j, cmp_j));
                 self.add_edge_weight(i, j, dist);
             },
@@ -327,12 +339,19 @@ impl CircuitGraph {
         // the nodes.
         let size_i = self.component_sizes[cmp_i];
         let size_j = self.component_sizes[cmp_j];
-        debug_assert!(size_i > 0 && size_j > 0, "components of size 0 should not be merged");
+        assert!(size_i > 0 && size_j > 0, "components of size 0 should not be merged");
 
         // We need: (a) to know which component to merge into, (b) to know which to merge from, and (c) to have some
         // node within the merged-from component through which we can start the traversal, to tell all nodes of that
         // component to update their references.
         let (dst_cmp, src_cmp, src_node) = if size_i >= size_j { (cmp_i, cmp_j, j) } else { (cmp_j, cmp_i, i) };
+
+        if aoc_utils::verbosity() >= 3 {
+            println!(
+                "    Merging component {src_cmp} (size {}) into {dst_cmp} (size {}).",
+                self.component_sizes[src_cmp], self.component_sizes[dst_cmp],
+            );
+        }
 
         // Update the sizes
         self.component_sizes[dst_cmp] += self.component_sizes[src_cmp];
@@ -344,7 +363,10 @@ impl CircuitGraph {
         while let Some(node_id) = stack.pop() {
             // `insert` returns true for new insertions
             if visited.insert(node_id) {
-                let node = self.nodes.get_mut(&node_id).expect("");
+                let node = self
+                    .nodes
+                    .get_mut(&node_id)
+                    .expect("nodes from adjacency list should be in graph");
                 node.cmp = dst_cmp;
                 stack.extend(&node.adj);
             }
