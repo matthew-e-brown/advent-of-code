@@ -32,6 +32,65 @@ enum Cell2 {
     BoxR,
 }
 
+/// Abstraction over both types of cell.
+trait Cell: Sized {
+    /// Checks if this cell is open space.
+    fn is_open(&self) -> bool;
+
+    /// Checks if this cell is a solid wall.
+    fn is_wall(&self) -> bool;
+
+    /// Checks if this cell is a box.
+    fn is_box(&self) -> bool;
+
+    /// If this cell is a box, returns a list of all the cells that but up against this cell in the given direction.
+    fn get_neighbours(&self, grid: &Grid<Self>, pos: Pos, dir: Dir4) -> Option<impl IntoIterator<Item = Self>>;
+}
+
+#[rustfmt::skip]
+impl Cell for Cell1 {
+    fn is_open(&self) -> bool { matches!(self, Self::Open) }
+    fn is_wall(&self) -> bool { matches!(self, Self::Wall) }
+    fn is_box(&self) -> bool { matches!(self, Self::Box) }
+
+    fn get_neighbours(&self, grid: &Grid<Self>, pos: Pos, dir: Dir4) -> Option<impl IntoIterator<Item = Self>> {
+        // This one just has to return the single cell in that direction.
+        match self {
+            Self::Box => Some([grid[pos + dir]]),
+            Self::Open | Self::Wall => None,
+        }
+    }
+}
+
+#[rustfmt::skip]
+impl Cell for Cell2 {
+    fn is_open(&self) -> bool { matches!(self, Self::Open) }
+    fn is_wall(&self) -> bool { matches!(self, Self::Wall) }
+    fn is_box(&self) -> bool { matches!(self, Self::BoxL | Self::BoxR) }
+
+    fn get_neighbours(&self, grid: &Grid<Self>, pos: Pos, dir: Dir4) -> Option<impl IntoIterator<Item = Self>> {
+        use std::iter::FilterMap;
+        use std::array::IntoIter;
+        use Dir4::{Up, Down, Left, Right};
+
+        #[rustfmt::skip]
+        let neighbours: [Option<Self>; 2] = match (self, dir) {
+            (Self::BoxL, Dir4::Up   ) => /* Get the neighbours above and above-right */ [Some(grid[pos + Up])           , Some(grid[pos + Up + Right])  ],
+            (Self::BoxL, Dir4::Down ) => /* Get the neighbours below and below-right */ [Some(grid[pos + Down])         , Some(grid[pos + Down + Right])],
+            (Self::BoxL, Dir4::Left ) => /* Get the neighbour to the right           */ [Some(grid[pos + Left])         , None                          ],
+            (Self::BoxL, Dir4::Right) => /* Get the neighbour two to the right       */ [Some(grid[pos + Right + Right]), None                          ],
+            (Self::BoxR, Dir4::Up   ) => /* Get the neighbours above and above-left  */ [Some(grid[pos + Up])           , Some(grid[pos + Up + Left])   ],
+            (Self::BoxR, Dir4::Down ) => /* Get the neighbours below and below-left  */ [Some(grid[pos + Down])         , Some(grid[pos + Down + Left]) ],
+            (Self::BoxR, Dir4::Left ) => /* Get the neighbour two to the left        */ [Some(grid[pos + Left + Left])  , None                          ],
+            (Self::BoxR, Dir4::Right) => /* Get the neighbour to the right           */ [Some(grid[pos + Right])        , None                          ],
+            (Self::Open | Self::Wall, _) => return None,
+        };
+
+        let iter: FilterMap<IntoIter<Option<Self>, 2>, _> = neighbours.into_iter().filter_map(|n| n);
+        Some(iter)
+    }
+}
+
 fn simulate(mut map: Grid<Cell1>, start_pos: Pos, moves: impl IntoIterator<Item = Dir4>) -> usize {
     let mut robot_pos = start_pos;
 
