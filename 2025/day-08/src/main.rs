@@ -1,10 +1,13 @@
+mod graph;
+
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::BinaryHeap;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use ahash::RandomState as AHashState;
 use aoc_utils::clap;
+
+use self::graph::CircuitGraph;
 
 // This puzzle seems to require additional input. There are 1000 junctions, which means there are 1,000,000 possible
 // pairs of junctions (500,500 if you exclude duplicates and self-connections). The puzzle asks us to find the 1000
@@ -28,6 +31,11 @@ struct Args {
 /// For part 1, after connecting the *n* closest pairs, we want to find the *m* largest circuits.
 const LARGEST_M: usize = 3;
 
+/// The type used to refer to a [Junction] by index.
+///
+/// [`u32`] is used instead of [`usize`] to keep struct sizes small.
+type Idx = u32;
+
 fn main() {
     let input = aoc_utils::puzzle_input();
     let junctions = input.lines().map(|line| line.parse::<Junction>().unwrap()).collect::<Vec<_>>();
@@ -50,8 +58,8 @@ fn main() {
             let b = &junctions[j];
             let dist = a.dist_sq(b);
 
-            let i = u32::try_from(i).expect("only up to u32::MAX junctions boxes are supported");
-            let j = j as u32; // j < i
+            let i = Idx::try_from(i).expect("overflow: too many junction boxes");
+            let j = j as Idx; // j < i
             closest_pairs.push(Reverse(JunctionPair { dist, i, j }));
         }
     }
@@ -61,17 +69,15 @@ fn main() {
     //
     // We need to keep track of: (1) which boxes are apart of which circuits, and (2) how large each circuit is. An
     // additional challenge here is that circuits can be merged together as we go. The most intuitive way to model this
-    // is as a disconnected graph... Aha! Notice that our `JunctionPair` struct already looks like a pretty good
-    // candidate for an `Edge` struct in an edge-list... If we just grab the top 1000 pairs, we will already have a
-    // graph. Not only that, this lets us keep the `dist` field on them, just in case Part 2 ends up asking us about the
-    // total size of each circuit (the wording of, "the Elves are concerned that they don't have enough extension cables
-    // for all these circuits," makes me suspicious that that will be case...).
+    // is as a graph with multiple components... Aha! Notice that our `JunctionPair` struct already looks like a pretty
+    // good candidate for an `Edge` struct in an edge-list... If we just grab the top 1000 pairs, we essentially already
+    // have a graph.
     //
-    // The next challenge is that, according to the way the problem is phrased, edges between junctions which have
-    // already been connected should not be made. We could run through a flood fill algorithm to determine the size of
-    // each component, and that would work for part 1; but, if we *are* eventually going to need to determine the total
-    // amount of wire used, we're going to have to eliminate those extra edges. So... let's just bite the bullet now and
-    // convert our edge-list into a bunch of adjacency lists, and delete those unneeded edges now.
+    // That said, it's not quite as simple as just using the first 1000 pairs as an edge-list. When connecting up our
+    // graph, we have to ensure that we don't add any edges between pairs already in the same component. I thought long
+    // and hard other, simpler-to-implement ways to handle that, but... in the end, I decided it was probably for the to
+    // just actually build a disconnected graph data structure. Much more elegant than having a bunch of random hashmaps
+    // and vectors sitting around as local variables.
 
     let mut graph = CircuitGraph::new();
     let mut pairs_connected = 0usize;
@@ -80,15 +86,15 @@ fn main() {
 
     while let Some(Reverse(pair)) = closest_pairs.pop() {
         let p = pairs_connected + 1;
+        let JunctionPair { i, j, dist } = pair;
 
         if aoc_utils::verbosity() >= 2 {
-            let JunctionPair { dist, i, j } = pair;
             let ji = junctions[i as usize];
             let jj = junctions[j as usize];
             println!("Closest pair #{p}: {ji:>17} and {jj:<17} (#{i:4} and #{j:4}), sq. dist = {dist}");
         }
 
-        graph.add_edge(pair);
+        graph.add_edge(i, j, dist);
         pairs_connected += 1;
 
         if pairs_connected == closest_n {
@@ -112,17 +118,18 @@ fn main() {
                     .reduce(|a, c| a * c)
                     .unwrap_or(0),
             );
-        } else if pairs_connected > closest_n && graph.num_nodes() == junctions.len() && graph.num_components() == 1 {
+        }
+
+        if graph.num_nodes() == junctions.len() && graph.num_components() == 1 {
             // Now we're in the second phase, we want to stop once all nodes appear in the final graph
             if aoc_utils::verbosity() >= 1 {
-                let JunctionPair { i, j, .. } = pair;
                 let ji = junctions[i as usize];
                 let jj = junctions[j as usize];
                 println!("\nPair #{p} was last needed to create one circuit: {ji} and {jj} (#{i:4} and #{j:4})\n");
             }
 
             final_pair = Some(pair);
-            break;
+            break; // Everything is now connected, we can stop now.
         }
     }
 
@@ -206,9 +213,8 @@ impl Display for Junction {
 #[derive(Debug, Clone, Copy)]
 struct JunctionPair {
     pub dist: u64,
-    // indices, but as u32 to shrink the struct size
-    pub i: u32,
-    pub j: u32,
+    pub i: Idx,
+    pub j: Idx,
 }
 
 impl PartialEq for JunctionPair {
@@ -229,227 +235,4 @@ impl PartialOrd for JunctionPair {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
-}
-
-#[derive(Debug, Clone)]
-#[allow(unused)]
-struct CircuitGraph {
-    // so much heap allocation... this thing is gonna be enormous!
-    /// The nodes of this graph.
-    nodes: HashMap<u32, Node, AHashState>,
-
-    /// The weight (distance) of each edge.
-    ///
-    /// This is not actually used for either part of this puzzle. But it was added during Part 1 in anticipation for
-    /// Part 2, and I may as well keep it! It'll be good for future reference.
-    edge_weights: HashMap<(u32, u32), u64, AHashState>,
-
-    /// A "map" from component index/label to component size.
-    ///
-    /// A size of zero means that that component has been deleted, and that this index may be re-used for a new
-    /// component.
-    component_sizes: Vec<u64>,
-
-    /// An *O*(1)-accessible component count. Avoids having to iterate through `component_sizes` and filter out the zero
-    /// values.
-    num_components: usize,
-}
-
-#[derive(Debug, Clone)]
-struct Node {
-    /// The index/label of the component this node is apart of.
-    cmp: usize,
-    /// This node's adjacency list.
-    adj: Vec<u32>,
-}
-
-#[allow(unused)]
-impl CircuitGraph {
-    pub fn new() -> Self {
-        Self {
-            nodes: Default::default(),
-            edge_weights: Default::default(),
-            component_sizes: Default::default(),
-            num_components: 0,
-        }
-    }
-
-    /// Finds a free spot in [`self.component_sizes`] to create a new component with the given number of nodes, or
-    /// creates a new component if there are no spots. The new component's index is returned.
-    ///
-    /// [`self.component_sizes`]: Self::component_sizes
-    fn new_component(&mut self, count: u64) -> usize {
-        self.num_components += 1;
-        let len = self.component_sizes.len();
-        if let Some(i) = (0..len).find(|&i| self.component_sizes[i] == 0) {
-            self.component_sizes[i] = count;
-            i
-        } else {
-            self.component_sizes.push(count);
-            len
-        }
-    }
-
-    /// Gets the number of unique nodes that are currently in this graph.
-    pub fn num_nodes(&self) -> usize {
-        self.nodes.len()
-    }
-
-    /// Adds a new node with no edges to this graph.
-    pub fn add_node(&mut self, i: u32) {
-        if !self.nodes.contains_key(&i) {
-            // New nodes are never in an existing component
-            let cmp_idx = self.new_component(1);
-            self.nodes.insert(i, Node { cmp: cmp_idx, adj: vec![] });
-        }
-    }
-
-    /// Adds up to two new nodes and their edge weight to this graph.
-    pub fn add_edge(&mut self, pair: JunctionPair) {
-        let JunctionPair { dist, i, j } = pair;
-
-        // Are i and j already in the graph? Are they in the same component?
-        let [node_i, node_j] = self.nodes.get_disjoint_mut([&i, &j]);
-
-        // Convert `Option<&mut Node>` into `Ok<&mut Node>` for existing nodes, and `Err((this, other))` for not-found
-        // nodes. This allows an individual match-arm down below to extract all the information it needs in one fell
-        // swoop just by pattern matching, which allows us to merge two arms which would otherwise need to be mirrors
-        // of one another. Said arms cannot be merged by extracting to a method, since we need Rust to see that our
-        // disjoint mutable borrows are unused by the time we start fiddling with `self` again.
-        let node_i = node_i.ok_or((i, j));
-        let node_j = node_j.ok_or((j, i));
-
-        match (node_i, node_j) {
-            // Neither are in the graph: a new component is created for these two nodes and they are both added.
-            (Err((i, _)), Err((j, _))) => {
-                let cmp_idx = self.new_component(2);
-                self.nodes.insert(i, Node { cmp: cmp_idx, adj: vec![j] });
-                self.nodes.insert(j, Node { cmp: cmp_idx, adj: vec![i] });
-                self.add_edge_weight(i, j, dist);
-
-                if aoc_utils::verbosity() >= 3 {
-                    println!("    {i} and {j} not connected yet.");
-                    println!("    Added {i} and {j} to new component #{cmp_idx}.")
-                }
-            },
-            // One is in the graph, and the other is not: the existing node has the other added to its adjacency list,
-            // and a new node is created for the missing one, with the same component index. That component then gets
-            // larger by one.
-            (Ok(found_node), Err((not_found, found))) | (Err((not_found, found)), Ok(found_node)) => {
-                let cmp_idx = found_node.cmp;
-                found_node.adj.push(not_found);
-                self.nodes.insert(not_found, Node { cmp: cmp_idx, adj: vec![found] });
-                self.component_sizes[cmp_idx] += 1;
-                self.add_edge_weight(i, j, dist);
-
-                if aoc_utils::verbosity() >= 3 {
-                    println!("    {found} was in graph in component #{cmp_idx}, but {not_found} as not.");
-                    println!("    Added {not_found} to component #{cmp_idx}.");
-                }
-            },
-            // Both are already in the same component: nothing happens.
-            (Ok(node_i), Ok(node_j)) if node_i.cmp == node_j.cmp => {
-                if aoc_utils::verbosity() >= 3 {
-                    println!("    {i} and {j} already connected in component #{}.", node_j.cmp);
-                }
-            },
-            // Both are in the graph, but not in the same component: the two components need to be merged. Neither one
-            // gets bigger before the merge takes place, since both were already present.
-            (Ok(node_i), Ok(node_j)) => {
-                // (nodes are *not* in each other's adjacency lists: otherwise they would've been in the same component)
-                node_i.adj.push(j);
-                node_j.adj.push(i);
-                let cmp_i = node_i.cmp;
-                let cmp_j = node_j.cmp;
-
-                if aoc_utils::verbosity() >= 3 {
-                    println!("    {i} and {j} in graph but not in same component.");
-                }
-
-                self.merge_components((i, cmp_i), (j, cmp_j));
-                self.add_edge_weight(i, j, dist);
-            },
-        }
-
-        if aoc_utils::verbosity() >= 4 {
-            println!(
-                "    Graph has {} nodes and {} components. Components: {:?}",
-                self.nodes.len(),
-                self.num_components,
-                self.component_sizes,
-            );
-        }
-    }
-
-    /// Adds an edge's weight to [`self.edge_weights`]. Ensures that `j < i` before inserting.
-    ///
-    /// [`self.edge_weights`]: Self::edge_weights
-    fn add_edge_weight(&mut self, i: u32, j: u32, dist: u64) {
-        // (technically, `j < i` should be guaranteed by how we initially constructed our JunctionPairs; but it can't
-        // hurt to be thorough).
-        let [min, max] = minmax(i, j);
-        self.edge_weights.insert((max, min), dist);
-    }
-
-    #[allow(unused)]
-    pub fn get_edge_weight(&self, i: u32, j: u32) -> Option<u64> {
-        let [min, max] = minmax(i, j);
-        self.edge_weights.get(&(max, min)).copied()
-    }
-
-    fn merge_components(&mut self, (i, cmp_i): (u32, usize), (j, cmp_j): (u32, usize)) {
-        // Determine which component is larger; keep that one since it means fewer iterations when traversing to update
-        // the nodes.
-        let size_i = self.component_sizes[cmp_i];
-        let size_j = self.component_sizes[cmp_j];
-        assert!(size_i > 0 && size_j > 0, "components of size 0 should not be merged");
-
-        // We need: (a) to know which component to merge into, (b) to know which to merge from, and (c) to have some
-        // node within the merged-from component through which we can start the traversal, to tell all nodes of that
-        // component to update their references.
-        let (dst_cmp, src_cmp, src_node) = if size_i >= size_j { (cmp_i, cmp_j, j) } else { (cmp_j, cmp_i, i) };
-
-        if aoc_utils::verbosity() >= 3 {
-            println!(
-                "    Merging component {src_cmp} (size {}) into {dst_cmp} (size {}).",
-                self.component_sizes[src_cmp], self.component_sizes[dst_cmp],
-            );
-        }
-
-        // Update the sizes
-        self.component_sizes[dst_cmp] += self.component_sizes[src_cmp];
-        self.component_sizes[src_cmp] = 0;
-
-        // Traverse!
-        let mut stack = vec![src_node];
-        let mut visited = HashSet::<u32, AHashState>::default();
-        while let Some(node_id) = stack.pop() {
-            // `insert` returns true for new insertions
-            if visited.insert(node_id) {
-                let node = self
-                    .nodes
-                    .get_mut(&node_id)
-                    .expect("nodes from adjacency list should be in graph");
-                node.cmp = dst_cmp;
-                stack.extend(&node.adj);
-            }
-        }
-
-        self.num_components -= 1;
-    }
-
-    /// Gets an iterator of all the components' IDs and their sizes in this graph.
-    pub fn component_sizes(&self) -> impl Iterator<Item = (usize, u64)> {
-        self.component_sizes.iter().copied().enumerate().filter(|(_, size)| *size != 0)
-    }
-
-    /// Gets the number of components in this graph.
-    pub fn num_components(&self) -> usize {
-        self.num_components
-    }
-}
-
-#[inline]
-fn minmax<T: Ord>(a: T, b: T) -> [T; 2] {
-    if a <= b { [a, b] } else { [b, a] }
 }
