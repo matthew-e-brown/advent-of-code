@@ -1,6 +1,9 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
+/// A label for a vertex in a graph.
+type Label = &'static str;
+
 fn main() {
     let input = aoc_utils::puzzle_input();
 
@@ -13,45 +16,59 @@ fn main() {
         }
     }
 
-    let paths_you_out = graph.all_simple_paths("you", "out");
-    let paths_svr_out = graph.all_simple_paths("svr", "out");
+    let num_paths_you_out = part1(&graph);
+    let num_paths_svr_out = part2(&graph);
 
-    print!("Number of paths from 'you' to 'out' (part 1): ");
-    if let Some(paths) = paths_you_out {
-        println!("{}", paths.len());
-    } else {
-        println!("None");
+    match num_paths_you_out {
+        Some(n) => println!("Number of paths from 'you' to 'out' (part 1): {n}"),
+        None => println!("Number of paths from 'you' to 'out' (part 1): None"),
     }
 
-    print!("Number of paths from 'svr' to 'out' which visit 'fft' and 'dac' (part 2): ");
-    if let Some(paths) = paths_svr_out {
-        let mut num_fft_dac = 0usize;
-
-        'paths: for path in paths {
-            let mut fft = false;
-            let mut dac = false;
-            for label in path {
-                if label == "fft" {
-                    fft = true;
-                } else if label == "dac" {
-                    dac = true;
-                }
-
-                if fft && dac {
-                    num_fft_dac += 1;
-                    continue 'paths;
-                }
-            }
-        }
-
-        println!("{num_fft_dac}");
-    } else {
-        println!("None");
+    match num_paths_svr_out {
+        Some(n) => println!("Number of paths from 'svr' to 'out' which visit 'fft' and 'dac' (part 2): {n}"),
+        None => println!("Number of paths from 'svr' to 'out' which visit 'fft' and 'dac' (part 2): None"),
     }
 }
 
-/// A label for a vertex in a graph.
-type Label = &'static str;
+fn part1(graph: &Graph) -> Option<usize> {
+    graph.all_simple_paths("you", "out").map(|v| v.len())
+}
+
+fn part2(graph: &Graph) -> Option<usize> {
+    std::thread::scope(|scope| {
+        // Simply finding all paths between 'svr' and 'out' takes *way* too long with the naïve approach. So we need to
+        // be more clever: instead, we'll do them in segments.
+        //
+        // Find all paths that go from 'svr'->'fft', then join those with paths that go from 'fft'->'dac', then join
+        // those with paths that go 'dac'->'out. Then do the same but for 'svr'->'dac', 'dac'->'fft', and 'fft'->'out'.
+
+        let svr_fft = scope.spawn(|| graph.all_simple_paths("svr", "fft").map(|v| v.len()));
+        let fft_dac = scope.spawn(|| graph.all_simple_paths("fft", "dac").map(|v| v.len()));
+        let dac_out = scope.spawn(|| graph.all_simple_paths("dac", "out").map(|v| v.len()));
+
+        let svr_dac = scope.spawn(|| graph.all_simple_paths("svr", "dac").map(|v| v.len()));
+        let dac_fft = scope.spawn(|| graph.all_simple_paths("dac", "fft").map(|v| v.len()));
+        let fft_out = scope.spawn(|| graph.all_simple_paths("fft", "out").map(|v| v.len()));
+
+        let svr_fft = svr_fft.join().expect("thread poisoned")?;
+        let fft_dac = fft_dac.join().expect("thread poisoned")?;
+        let dac_out = dac_out.join().expect("thread poisoned")?;
+
+        let svr_dac = svr_dac.join().expect("thread poisoned")?;
+        let dac_fft = dac_fft.join().expect("thread poisoned")?;
+        let fft_out = fft_out.join().expect("thread poisoned")?;
+
+        // If there are 2 paths from A->B, and 2 paths from B->C, then there are 4 total paths from A->C: `A↗B↗C`,
+        // `A↘B↗C`, `A↗B↘C`, `A↘B↘C` (where '↗' and '↘' are imaginary "up" and "down" paths).
+        //
+        // Let's just make the gung-ho assumption that that generalizes super well, and that the number of total
+        // possible paths can be found by multiplying the bits together.
+
+        let svr_fft_dac_out = svr_fft * fft_dac * dac_out;
+        let svr_dac_fft_out = svr_dac * dac_fft * fft_out;
+        Some(svr_fft_dac_out + svr_dac_fft_out)
+    })
+}
 
 // How many times am I going to implement a graph this year?
 #[derive(Debug)]
@@ -94,7 +111,8 @@ impl Graph {
         }
     }
 
-    /// Finds all simple paths between two vertices in this graph.
+    /// Finds all simple paths between two vertices in this graph. Returns `None` if either the start or end vertex is
+    /// not present in the graph.
     ///
     /// See:
     /// - <https://stackoverflow.com/a/14089904/10549827>
@@ -138,6 +156,10 @@ impl Graph {
                 // Otherwise, we want to keep going:
                 visited.insert(src);
                 for neighbour in graph.nodes.get(src).as_deref().unwrap() {
+                    if aoc_utils::verbosity() >= 2 {
+                        println!("\tStepping from {src} to {neighbour}...");
+                    }
+
                     dfs(graph, neighbour, dst, visited, all_paths, curr_path);
                 }
 
@@ -145,6 +167,10 @@ impl Graph {
                 visited.remove(src);
                 curr_path.pop();
             }
+        }
+
+        if aoc_utils::verbosity() >= 1 {
+            println!("Finding all simple paths between {source} and {destination}...");
         }
 
         let mut visited = HashSet::new();
