@@ -13,8 +13,41 @@ fn main() {
         }
     }
 
-    let all_paths = graph.all_simple_paths("you", "out");
-    println!("Number of paths from 'you' to 'out' (part 1): {}", all_paths.len());
+    let paths_you_out = graph.all_simple_paths("you", "out");
+    let paths_svr_out = graph.all_simple_paths("svr", "out");
+
+    print!("Number of paths from 'you' to 'out' (part 1): ");
+    if let Some(paths) = paths_you_out {
+        println!("{}", paths.len());
+    } else {
+        println!("None");
+    }
+
+    print!("Number of paths from 'svr' to 'out' which visit 'fft' and 'dac' (part 2): ");
+    if let Some(paths) = paths_svr_out {
+        let mut num_fft_dac = 0usize;
+
+        'paths: for path in paths {
+            let mut fft = false;
+            let mut dac = false;
+            for label in path {
+                if label == "fft" {
+                    fft = true;
+                } else if label == "dac" {
+                    dac = true;
+                }
+
+                if fft && dac {
+                    num_fft_dac += 1;
+                    continue 'paths;
+                }
+            }
+        }
+
+        println!("{num_fft_dac}");
+    } else {
+        println!("None");
+    }
 }
 
 /// A label for a vertex in a graph.
@@ -66,11 +99,9 @@ impl Graph {
     /// See:
     /// - <https://stackoverflow.com/a/14089904/10549827>
     /// - <https://www.baeldung.com/cs/simple-paths-between-two-vertices>
-    pub fn all_simple_paths(&self, source: Label, destination: Label) -> Vec<Box<[Label]>> {
-        if !self.nodes.contains_key(source) {
-            panic!("Graph does not contain a '{source}' node");
-        } else if !self.nodes.contains_key(destination) {
-            panic!("Graph does not contain a '{destination}' node");
+    pub fn all_simple_paths(&self, source: Label, destination: Label) -> Option<Vec<Box<[Label]>>> {
+        if !self.nodes.contains_key(source) || !self.nodes.contains_key(destination) {
+            return None;
         }
 
         /// The recursive part of the algorithm.
@@ -122,7 +153,6 @@ impl Graph {
 
         dfs(self, source, destination, &mut visited, &mut all_paths, &mut curr_path);
 
-        // We only really need to know the number of paths, but it can't hurt to actually return them... why not?
-        all_paths
+        Some(all_paths)
     }
 }
