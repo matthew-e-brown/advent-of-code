@@ -50,7 +50,7 @@ if [[ -z "$DAY" ]]; then
 fi
 
 # Strip zero-padding to do comparisons (otherwise, they'd be octal):
-DAY="${DAY##*0}"
+DAY="$((10#$DAY))"
 
 if [[ ! "$DAY" =~ ^[0-9]+$ ]]; then
     >&2 echo "Day $DAY is not a number."
@@ -69,3 +69,7 @@ cargo new --bin --name "aoc${YEAR}_${DAY}" "day-${DAY}"
 
 # Append aoc_utils as dependency to Cargo.toml:
 echo 'aoc_utils = { version = "*", path = "../../aoc_utils" }' >> "day-${DAY}/Cargo.toml"
+
+# Create example.txt and input.txt ready for pasting into:
+touch "day-${DAY}/example.txt"
+touch "day-${DAY}/input.txt"
