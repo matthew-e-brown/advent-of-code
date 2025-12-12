@@ -157,7 +157,7 @@ impl Polygon {
         Polygon { points }
     }
 
-    /// Gets a list of all the points in this polygon, with the last point repeated (to close the polygon).
+    /// Gets a list of all the points in this polygon.
     pub fn points(&self) -> &[Point] {
         &self.points[..self.num_points()]
     }

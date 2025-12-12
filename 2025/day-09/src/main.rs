@@ -1,4 +1,5 @@
 mod shapes;
+mod svg;
 
 use self::shapes::{Line, Point, Polygon, Rectangle};
 
@@ -16,6 +17,11 @@ fn main() {
     // different threads.
     let polygon = Polygon::from_points(points);
     let all_rectangles = compute_rectangles(polygon.points());
+
+    if aoc_utils::verbosity() >= 5 {
+        write_svg(&polygon);
+        return;
+    }
 
     let num_threads = std::thread::available_parallelism()
         .map(|n| n.get() / 2)
@@ -169,4 +175,17 @@ fn line_crosses_line(l1: &Line, l2: &Line) -> bool {
     }
 
     false
+}
+
+
+/// For debugging.
+fn write_svg(polygon: &Polygon) {
+    println!("Writing puzzle visualization to SVG file...");
+
+    let input_name = aoc_utils::puzzle_input_filename();
+    let output_name = input_name.with_extension("svg");
+    let svg = svg::render_polygon(&polygon);
+
+    std::fs::write(output_name, svg).expect("Writing to file failed.");
+    println!("Done.");
 }
