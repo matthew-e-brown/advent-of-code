@@ -4,7 +4,12 @@ mod svg;
 use self::shapes::{Line, Point, Polygon, Rectangle};
 
 // Attempted answers:
-// - 269731960 (too low)
+// 1. 269731960 (too low)
+// 3. 1343471150 (too low)
+// 6. 1343576598 (correct!!!!)
+// 5. 1390569272
+// 4. 1442931924
+// 2. 1537397316 (too high)
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -152,8 +157,8 @@ fn line_crosses_line(l1: &Line, l2: &Line) -> bool {
         return false;
     };
 
-    let (vt, vb) = if v.a.y <= v.b.y { (v.a, v.b) } else { (v.b, v.a) }; // Vertical's top/bottom
-    let (hl, hr) = if h.a.x <= h.b.x { (h.a, h.b) } else { (h.b, h.a) }; // Horizontal's left/right
+    let (vt, vb) = if v.a.y <= v.b.y { (v.a.y, v.b.y) } else { (v.b.y, v.a.y) }; // Vertical's top/bottom
+    let (hl, hr) = if h.a.x <= h.b.x { (h.a.x, h.b.x) } else { (h.b.x, h.a.x) }; // Horizontal's left/right
 
     // The vertical line's x position and the horizontal line's y position are both the same regardless
     // of which start/end point we take it from:
@@ -163,14 +168,14 @@ fn line_crosses_line(l1: &Line, l2: &Line) -> bool {
     // If the x coordinate of the vertical line is not between the endpoints of the horizontal line,
     // or the y coordinate of the horizontal line is not between the endpoints of the vertical line,
     // there is no intersection:
-    if (vx < hl.x || vx > hr.x) || (hy < vt.y || hy > vb.y) {
+    if (vx < hl || vx > hr) || (hy < vt || hy > vb) {
         return false;
     }
 
     // Otherwise, if the vertical line's two y coordinates are on opposite sides of the horizontal line,
     // or the horizontal line's x coordinates are on opposite sides of the vertical line,
     // we have an intersection!
-    if (vt.y < hy && vb.y > hy) || (hl.x < vx && hr.x > vx) {
+    if (vt < hy && vb > hy) || (hl < vx && hr > vx) {
         return true;
     }
 
@@ -189,3 +194,126 @@ fn write_svg(polygon: &Polygon) {
     std::fs::write(output_name, svg).expect("Writing to file failed.");
     println!("Done.");
 }
+
+/*
+const rootSvg = document.querySelector('svg');
+document.querySelector('g#debug')?.remove();
+document.querySelector('g#known')?.remove();
+const points = Array.prototype.map.call(document.querySelectorAll('g rect'), rect => {
+    const x = (+rect.x.baseVal.valueAsString) + 0.5;
+    const y = (+rect.y.baseVal.valueAsString) + 0.5;
+    return [x,y];
+});
+function rectFromCorners([x1, y1], [x2, y2]) {
+    const [xMin, xMax] = x1 <= x2 ? [x1, x2] : [x2, x1];
+    const [yMin, yMax] = y1 <= y2 ? [y1, y2] : [y2, y1];
+    const w = xMax - xMin;
+    const h = yMax - yMin;
+    return { x: xMin, y: yMin, w, h };
+}
+function rectFromRect(rect) {
+    return {
+        x: +rect.x.baseVal.valueAsString,
+        y: +rect.y.baseVal.valueAsString,
+        w: +rect.width.baseVal.valueAsString,
+        h: +rect.height.baseVal.valueAsString,
+    };
+}
+function relMousePos(event) {
+    const { clientX: x, clientY: y } = event;
+    const pt = new DOMPoint(x, y);
+    const rel = pt.matrixTransform(rootSvg.getScreenCTM().inverse());
+    console.log('Mouse click at pos:', [x, y], 'Converted to:', [rel.x, rel.y]);
+    return [rel.x, rel.y];
+}
+function makeRectElem(rect) {
+    const elem = document.createElementNS("http://www.w3.org/2000/svg", 'rect');
+    elem.setAttribute('x', rect.x.toString());
+    elem.setAttribute('y', rect.y.toString());
+    elem.setAttribute('width', rect.w.toString());
+    elem.setAttribute('height', rect.h.toString());
+    elem.setAttribute('fill', 'red');
+    elem.setAttribute('opacity', '0.1');
+    elem.setAttribute('data-area', ((rect.w + 1) * (rect.h + 1)).toString());
+    return elem;
+}
+function makeDotElem([x, y], fill = 'black', r = 100) {
+    const elem = document.createElementNS("http://www.w3.org/2000/svg", 'circle');
+    elem.setAttribute('cx', x.toString());
+    elem.setAttribute('cy', y.toString());
+    elem.setAttribute('r', r.toString());
+    elem.setAttribute('fill', fill);
+    return elem;
+}
+function rectContains(rect, [x, y]) {
+    const { x: rx, y: ry, w, h } = rect;
+    return (rx <= x && x <= rx + w && ry <= y && y <= ry + h);
+}
+function rectCorners(rect) {
+    const { x, y, w, h } = rect;
+    return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+}
+const ox = (94926+1746)/2;
+const oy = (50372+48373)/2;
+function distFromCenter([x, y]) {
+    const dx = ox - x;
+    const dy = oy - y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+const knownBad = []; // Array of points inside the big hole
+for (let x = 1746; x <= 94926 - 10; x += 250) {
+    // From left to right, add a point at the top and the bottom
+    knownBad.push([x, 50372 - 10]);
+    knownBad.push([x, 48373 + 10]);
+}
+knownBad.push([ox, oy]);
+const newGroup = document.createElementNS("http://www.w3.org/2000/svg", 'g');
+const badGroup = document.createElementNS("http://www.w3.org/2000/svg", 'g');
+newGroup.setAttribute('id', 'debug');
+badGroup.setAttribute('id', 'known');
+let n = 0;
+for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+        const rect = rectFromCorners(points[i], points[j]);
+        const area = ((rect.w + 1) * (rect.h + 1));
+        if (
+            true
+            && area >= 269731960
+            && !knownBad.some(pt => rectContains(rect, pt))
+            && rectCorners(rect).every(pt => distFromCenter(pt) <= 50000)
+        ) {
+            const elem = makeRectElem(rect);
+            elem.setAttribute('id', `rect-${n++}`);
+            elem.setAttribute('data-i', i.toString());
+            elem.setAttribute('data-j', j.toString());
+            newGroup.append(elem);
+        }
+    }
+}
+for (const bad of knownBad) {
+    badGroup.append(makeDotElem(bad));
+}
+rootSvg.addEventListener('click', event => {
+    console.log('Click detected...');
+    const mousePos = relMousePos(event);
+    let n = 0;
+    let child = newGroup.children[0];
+    while (child) {
+        const next = child.nextElementSibling;
+        if (rectContains(rectFromRect(child), mousePos)) {
+            child.remove();
+            n++;
+        }
+        child = next;
+    }
+    badGroup.append(makeDotElem(mousePos, 'blue'));
+    console.log('Click processed, removed', n, 'children');
+});
+rootSvg.append(newGroup);
+rootSvg.append(badGroup);
+function getSortedAreas() {
+    return [...newGroup.children]
+        .map(rect => ({ rect, area: +rect.getAttribute('data-area') }))
+        .toSorted((a, b) => b.area - a.area);
+}
+*/
