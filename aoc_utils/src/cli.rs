@@ -1,24 +1,34 @@
 use std::ffi::OsString;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 pub use clap;
 use clap::{ArgAction, ArgMatches, Command, Parser, ValueHint};
 
-/// A single, lazily-initialized instance of the user's [CLI input][Input].
-static CLI_INPUT: LazyLock<Input> = LazyLock::new(|| Input::parse());
+/// A single, lazily-initialized instance of the user's [CLI input][Args].
+static CLI_ARGS: LazyLock<Args> = LazyLock::new(|| Args::parse());
+
+/// Struct containing both an input file's contents and its path.
+///
+/// A wrapper struct is used to make working with clap's automatic value parsing a little easier.
+#[derive(Debug, Clone)]
+struct Input {
+    path: PathBuf,
+    text: String,
+}
 
 /// General command-line format for all Advent of Code puzzle solutions.
 #[derive(Parser, Debug)]
-struct Input {
+struct Args {
     /// The name of the file to read puzzle input from.
     #[arg(
         required = true,
         value_name = "FILE",
         value_hint = ValueHint::FilePath,
-        value_parser = read_file,
+        value_parser = load_input,
     )]
-    input: String,
+    input: Input,
 
     /// Set to activate printing. Specify multiple times for increased verbosity.
     ///
@@ -33,14 +43,20 @@ struct Input {
     puzzle_args: Vec<OsString>,
 }
 
-// Clap won't accept `fs::read_to_string` directly because of a lifetime issue:
-//
-// - https://github.com/clap-rs/clap/issues/4939
-// - https://www.reddit.com/r/rust/comments/ntqu68/implementation_of_fnonce_is_not_general_enough/
-//
-// Using a wrapper function seems to fix it.
-fn read_file(path: &str) -> std::io::Result<String> {
-    fs::read_to_string(path)
+/// Value-parser for use with clap.
+fn load_input(path: &str) -> std::io::Result<Input> {
+    let text = fs::read_to_string(path)?;
+    let path = path
+        .parse::<PathBuf>()
+        .expect("path must be valid if fs::read_to_string already succeeded");
+    Ok(Input { path, text })
+}
+
+/// Returns the path to the file that was specified as puzzle input on the command line.
+///
+/// This path is guaranteed to be a [file name][Path::is_file].
+pub fn puzzle_input_filename() -> &'static Path {
+    CLI_ARGS.input.path.as_path()
 }
 
 /// Returns the contents of the file specified as puzzle input on the command line.
@@ -48,12 +64,12 @@ fn read_file(path: &str) -> std::io::Result<String> {
 /// This implementation takes a stance and makes the upfront trade-off of favouring simplicity (reading all input into a
 /// static buffer) instead of performance (operating on puzzle input as it is read from the file directly).
 pub fn puzzle_input() -> &'static str {
-    &CLI_INPUT.input[..]
+    CLI_ARGS.input.text.as_str()
 }
 
 /// Checks program arguments on the command line for verbosity.
 pub fn verbosity() -> u8 {
-    CLI_INPUT.verbose
+    CLI_ARGS.verbose
 }
 
 /// Parses trailing arguments provided on the command line into a custom format that may be used by each individual
@@ -70,9 +86,9 @@ pub fn verbosity() -> u8 {
 ///     // ...
 /// }
 /// ```
-pub fn parse_puzzle_args<Args: Parser>() -> Args {
-    let matches = match_puzzle_args(Args::command());
-    match Args::from_arg_matches(&matches) {
+pub fn parse_puzzle_args<A: Parser>() -> A {
+    let matches = match_puzzle_args(A::command());
+    match A::from_arg_matches(&matches) {
         Ok(args) => args,
         Err(err) => err.exit(),
     }
@@ -84,6 +100,6 @@ pub fn parse_puzzle_args<Args: Parser>() -> Args {
 /// `true`.
 pub fn match_puzzle_args(cmd: Command) -> ArgMatches {
     // We need to ensure that provided command doesn't expect to see a binary name at the start of its arguments.
-    let args = CLI_INPUT.puzzle_args.iter();
+    let args = CLI_ARGS.puzzle_args.iter();
     cmd.no_binary_name(true).get_matches_from(args)
 }
