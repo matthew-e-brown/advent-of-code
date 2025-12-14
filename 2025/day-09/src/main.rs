@@ -94,6 +94,7 @@ fn find_largest_rectangles(rectangles: &[Rectangle], polygon: &Polygon) -> (u64,
 
         max_overall = max_overall.max(area);
         if !rect_crosses_poly(rect, polygon) {
+            // From back before switching the Rectangle struct from p1,p2 to l,r,t,b:
             /* if aoc_utils::verbosity() >= 2 {
                 println!("Rectangle between {} and {} (area {}) fits inside polygon", rect.p1, rect.p2, area);
             } */
