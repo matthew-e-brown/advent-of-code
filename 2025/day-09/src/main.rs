@@ -3,14 +3,6 @@ mod svg;
 
 use self::shapes::{Line, Point, Polygon, Rectangle};
 
-// Attempted answers:
-// 1. 269731960 (too low)
-// 3. 1343471150 (too low)
-// 6. 1343576598 (correct!!!!)
-// 5. 1390569272
-// 4. 1442931924
-// 2. 1537397316 (too high)
-
 fn main() {
     let input = aoc_utils::puzzle_input();
     let points = input
@@ -102,15 +94,15 @@ fn find_largest_rectangles(rectangles: &[Rectangle], polygon: &Polygon) -> (u64,
 
         max_overall = max_overall.max(area);
         if !rect_crosses_poly(rect, polygon) {
-            if aoc_utils::verbosity() >= 2 {
+            /* if aoc_utils::verbosity() >= 2 {
                 println!("Rectangle between {} and {} (area {}) fits inside polygon", rect.p1, rect.p2, area);
-            }
+            } */
 
             max_inside = max_inside.max(area);
         } else {
-            if aoc_utils::verbosity() >= 3 {
+            /* if aoc_utils::verbosity() >= 3 {
                 println!("\tRectangle between {} and {} (area {}) does not fit inside polygon", rect.p1, rect.p2, area);
-            }
+            } */
         }
     }
 
@@ -119,71 +111,62 @@ fn find_largest_rectangles(rectangles: &[Rectangle], polygon: &Polygon) -> (u64,
 
 /// Determines if the given rectangle "intersects" with the given polygon.
 fn rect_crosses_poly(rect: &Rectangle, polygon: &Polygon) -> bool {
-    // Starting from <https://stackoverflow.com/a/4833823/10549827>, there are a few simplifications we can make:
+    // The basic idea is as in <https://stackoverflow.com/a/4833823/10549827>: we just need to check if the rectangle
+    // and the polygon intersect. But there are a few adjustments we need to make:
     //
     // - We know that all our rectangles are constructed entirely from points of the given polygon, so we don't need to
     //   check if any of the rectangle's points are contained within the polygon.
     // - Lines in this puzzle have an inherent thickness of 1 unit; we don't care when two lines *overlap*, only when
     //   they *intersect*. Hence why this function is called `crosses` instead of `intersects`.
-    // - We know that all the lines in our puzzle are either strictly vertical or strictly horizontal.
-    // - So, the only way that two lines can "intersect" is if one is horizontal and one is vertical.
-    //
-    // That means that our rectangle is inside of our polygon as long as *none* of the edges cross.
-    let rect_lines = rect.edges();
-    for poly_line in polygon.edges() {
-        for &rect_line in &rect_lines {
-            if line_crosses_line(&rect_line, &poly_line) {
-                if aoc_utils::verbosity() >= 3 {
-                    println!("{rect_line:?} intersects {poly_line:?}");
-                }
-                return true;
-            }
+    // - We know that all the lines in our puzzle are either strictly vertical or strictly horizontal, which simplifies
+    //   things massively.
+    for line in polygon.edges() {
+        if line_crosses_rect(&line, &rect) {
+            return true;
         }
     }
 
     false
 }
 
-fn line_crosses_line(l1: &Line, l2: &Line) -> bool {
-    // Figure out which of the two is vertical and which is horizontal:
-    // (as mentioned above, those are the only cases where an intersection can happen)
-    let (v, h) = if l1.is_vertical() && l2.is_horizontal() {
-        // | vs. --
-        (l1, l2)
-    } else if l1.is_horizontal() && l2.is_vertical() {
-        // -- vs. |
-        (l2, l1)
+/// Detects if a line crosses into a rectangle.
+fn line_crosses_rect(line: &Line, rect: &Rectangle) -> bool {
+    let Line { a, b } = line;
+
+    // There is almost certainly
+    if line.is_horizontal() {
+        let ly = line.a.y;
+        // If this horizontal line is not between the top and bottom edges of the rectangle, it cannot possibly
+        // intersect. Note that this specifically excludes any lines that pass directly along the top or bottom of the
+        // rectangle; those never count as crossings. Any lines that do pass directly through the top or bottom line of
+        // the rectangle will cause a crossing if the vertical edge they form a corner with descends down into the
+        // rectangle (or ascends up into it).
+        if rect.t < ly && ly < rect.b {
+            // If either of the rectangle's L/R edges are *between* the line's endpoints, we have a cross.
+            let [line_l, line_r] = if a.x <= b.x { [a.x, b.x] } else { [b.x, a.x] };
+            (line_l <= rect.l && rect.l < line_r) || (line_l < rect.r && rect.r <= line_r)
+        } else {
+            false
+        }
+    } else if line.is_vertical() {
+        let lx = line.a.x;
+        // Is this vertical line between the left and right edges of the rectangle?
+        if rect.l < lx && lx < rect.r {
+            // If so, then we have a cross as long as the rectangle's top edge or bottom edge is between the top and
+            // bottom of the line.
+            let [line_t, line_b] = if a.y <= b.y { [a.y, b.y] } else { [b.y, a.y] };
+            (line_t <= rect.t && rect.t < line_b) || (line_t < rect.b && rect.b <= line_b)
+        } else {
+            false
+        }
     } else {
-        return false;
-    };
-
-    let (vt, vb) = if v.a.y <= v.b.y { (v.a.y, v.b.y) } else { (v.b.y, v.a.y) }; // Vertical's top/bottom
-    let (hl, hr) = if h.a.x <= h.b.x { (h.a.x, h.b.x) } else { (h.b.x, h.a.x) }; // Horizontal's left/right
-
-    // The vertical line's x position and the horizontal line's y position are both the same regardless
-    // of which start/end point we take it from:
-    let vx = v.a.x;
-    let hy = h.a.y;
-
-    // If the x coordinate of the vertical line is not between the endpoints of the horizontal line,
-    // or the y coordinate of the horizontal line is not between the endpoints of the vertical line,
-    // there is no intersection:
-    if (vx < hl || vx > hr) || (hy < vt || hy > vb) {
-        return false;
+        panic!("Encountered diagonal line");
     }
-
-    // Otherwise, if the vertical line's two y coordinates are on opposite sides of the horizontal line,
-    // or the horizontal line's x coordinates are on opposite sides of the vertical line,
-    // we have an intersection!
-    if (vt < hy && vb > hy) || (hl < vx && hr > vx) {
-        return true;
-    }
-
-    false
 }
 
-
-/// For debugging.
+/// Writes the given polygon to an SVG file based on the current puzzle input filename.
+///
+/// Used for debugging/visualization.
 fn write_svg(polygon: &Polygon) {
     println!("Writing puzzle visualization to SVG file...");
 
@@ -194,126 +177,3 @@ fn write_svg(polygon: &Polygon) {
     std::fs::write(output_name, svg).expect("Writing to file failed.");
     println!("Done.");
 }
-
-/*
-const rootSvg = document.querySelector('svg');
-document.querySelector('g#debug')?.remove();
-document.querySelector('g#known')?.remove();
-const points = Array.prototype.map.call(document.querySelectorAll('g rect'), rect => {
-    const x = (+rect.x.baseVal.valueAsString) + 0.5;
-    const y = (+rect.y.baseVal.valueAsString) + 0.5;
-    return [x,y];
-});
-function rectFromCorners([x1, y1], [x2, y2]) {
-    const [xMin, xMax] = x1 <= x2 ? [x1, x2] : [x2, x1];
-    const [yMin, yMax] = y1 <= y2 ? [y1, y2] : [y2, y1];
-    const w = xMax - xMin;
-    const h = yMax - yMin;
-    return { x: xMin, y: yMin, w, h };
-}
-function rectFromRect(rect) {
-    return {
-        x: +rect.x.baseVal.valueAsString,
-        y: +rect.y.baseVal.valueAsString,
-        w: +rect.width.baseVal.valueAsString,
-        h: +rect.height.baseVal.valueAsString,
-    };
-}
-function relMousePos(event) {
-    const { clientX: x, clientY: y } = event;
-    const pt = new DOMPoint(x, y);
-    const rel = pt.matrixTransform(rootSvg.getScreenCTM().inverse());
-    console.log('Mouse click at pos:', [x, y], 'Converted to:', [rel.x, rel.y]);
-    return [rel.x, rel.y];
-}
-function makeRectElem(rect) {
-    const elem = document.createElementNS("http://www.w3.org/2000/svg", 'rect');
-    elem.setAttribute('x', rect.x.toString());
-    elem.setAttribute('y', rect.y.toString());
-    elem.setAttribute('width', rect.w.toString());
-    elem.setAttribute('height', rect.h.toString());
-    elem.setAttribute('fill', 'red');
-    elem.setAttribute('opacity', '0.1');
-    elem.setAttribute('data-area', ((rect.w + 1) * (rect.h + 1)).toString());
-    return elem;
-}
-function makeDotElem([x, y], fill = 'black', r = 100) {
-    const elem = document.createElementNS("http://www.w3.org/2000/svg", 'circle');
-    elem.setAttribute('cx', x.toString());
-    elem.setAttribute('cy', y.toString());
-    elem.setAttribute('r', r.toString());
-    elem.setAttribute('fill', fill);
-    return elem;
-}
-function rectContains(rect, [x, y]) {
-    const { x: rx, y: ry, w, h } = rect;
-    return (rx <= x && x <= rx + w && ry <= y && y <= ry + h);
-}
-function rectCorners(rect) {
-    const { x, y, w, h } = rect;
-    return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
-}
-const ox = (94926+1746)/2;
-const oy = (50372+48373)/2;
-function distFromCenter([x, y]) {
-    const dx = ox - x;
-    const dy = oy - y;
-    return Math.sqrt(dx * dx + dy * dy);
-}
-const knownBad = []; // Array of points inside the big hole
-for (let x = 1746; x <= 94926 - 10; x += 250) {
-    // From left to right, add a point at the top and the bottom
-    knownBad.push([x, 50372 - 10]);
-    knownBad.push([x, 48373 + 10]);
-}
-knownBad.push([ox, oy]);
-const newGroup = document.createElementNS("http://www.w3.org/2000/svg", 'g');
-const badGroup = document.createElementNS("http://www.w3.org/2000/svg", 'g');
-newGroup.setAttribute('id', 'debug');
-badGroup.setAttribute('id', 'known');
-let n = 0;
-for (let i = 0; i < points.length; i++) {
-    for (let j = i + 1; j < points.length; j++) {
-        const rect = rectFromCorners(points[i], points[j]);
-        const area = ((rect.w + 1) * (rect.h + 1));
-        if (
-            true
-            && area >= 269731960
-            && !knownBad.some(pt => rectContains(rect, pt))
-            && rectCorners(rect).every(pt => distFromCenter(pt) <= 50000)
-        ) {
-            const elem = makeRectElem(rect);
-            elem.setAttribute('id', `rect-${n++}`);
-            elem.setAttribute('data-i', i.toString());
-            elem.setAttribute('data-j', j.toString());
-            newGroup.append(elem);
-        }
-    }
-}
-for (const bad of knownBad) {
-    badGroup.append(makeDotElem(bad));
-}
-rootSvg.addEventListener('click', event => {
-    console.log('Click detected...');
-    const mousePos = relMousePos(event);
-    let n = 0;
-    let child = newGroup.children[0];
-    while (child) {
-        const next = child.nextElementSibling;
-        if (rectContains(rectFromRect(child), mousePos)) {
-            child.remove();
-            n++;
-        }
-        child = next;
-    }
-    badGroup.append(makeDotElem(mousePos, 'blue'));
-    console.log('Click processed, removed', n, 'children');
-});
-rootSvg.append(newGroup);
-rootSvg.append(badGroup);
-function getSortedAreas() {
-    return [...newGroup.children]
-        .map(rect => ({ rect, area: +rect.getAttribute('data-area') }))
-        .toSorted((a, b) => b.area - a.area);
-}
-*/

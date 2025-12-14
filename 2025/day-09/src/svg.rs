@@ -1,3 +1,7 @@
+//! Polygon-to-SVG rendering code.
+//!
+//! This was used for debugging in Part 2. It's easier to solve problems you can see!
+
 use std::fmt::Write;
 
 use crate::shapes::{Point, Polygon};
@@ -32,7 +36,9 @@ pub fn render_polygon(polygon: &Polygon) -> String {
 
         write!(&mut polygon, "{},{} ", x, y).unwrap();
         write!(&mut p_group, r##"  <rect width="1" height="1" "##).unwrap();
-        // This is kinda messy, but basically: w
+        // This is kinda messy, but basically: we want to offset each rectangle by -0.5, which we can do by subtracting
+        // 1 and manually printing a .5 after it; but we can't do that if `x` is already zero. This isn't a problem on
+        // the actual input, but it might come up in certain examples/test cases.
         #[rustfmt::skip]
         {
             if x == 0 { write!(&mut p_group, "x=\"-0.5\" ") } else { write!(&mut p_group, "x=\"{}.5\" ", x - 1) }.unwrap();

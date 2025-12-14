@@ -15,8 +15,10 @@ pub struct Line {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rectangle {
-    pub p1: Point,
-    pub p2: Point,
+    pub l: u32,
+    pub r: u32,
+    pub t: u32,
+    pub b: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,13 +27,6 @@ pub struct Polygon {
     ///
     /// The first point is repeated at the end of the list to make this a closed polygon.
     points: Vec<Point>,
-}
-
-impl Point {
-    /// Creates a new point from `x` and `y` coordinates.
-    pub const fn new(x: u32, y: u32) -> Point {
-        Point { x, y }
-    }
 }
 
 impl FromStr for Point {
@@ -78,49 +73,30 @@ impl Line {
 
 impl Debug for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"Line({} to {})", self.a, self.b)
+        write!(f, "Line({} to {})", self.a, self.b)
     }
 }
 
 impl Rectangle {
     /// Creates a new rectangle from two corner [points][Point].
     pub const fn new(p1: Point, p2: Point) -> Rectangle {
-        Rectangle { p1, p2 }
+        let Point { x: x1, y: y1 } = p1;
+        let Point { x: x2, y: y2 } = p2;
+        let [l, r] = if x1 <= x2 { [x1, x2] } else { [x2, x1] };
+        let [t, b] = if y1 <= y2 { [y1, y2] } else { [y2, y1] };
+        Rectangle { l, r, t, b }
     }
 
     pub const fn width(&self) -> u32 {
-        self.p1.x.abs_diff(self.p2.x) + 1
+        self.r - self.l + 1
     }
 
     pub const fn height(&self) -> u32 {
-        self.p1.y.abs_diff(self.p2.y) + 1
+        self.b - self.t + 1
     }
 
     pub const fn area(&self) -> u64 {
         (self.width() as u64) * (self.height() as u64)
-    }
-
-    /// Returns the four edges that make up this rectangle.
-    ///
-    /// The order of the edges are: top, right, bottom, left.
-    pub const fn edges(&self) -> [Line; 4] {
-        let Point { x: x1, y: y1 } = self.p1;
-        let Point { x: x2, y: y2 } = self.p2;
-
-        let [xl, xr] = if x1 <= x2 { [x1, x2] } else { [x2, x1] };
-        let [yt, yb] = if y1 <= y2 { [y1, y2] } else { [y2, y1] };
-
-        let tl = Point::new(xl, yt);
-        let tr = Point::new(xr, yt);
-        let bl = Point::new(xl, yb);
-        let br = Point::new(xr, yb);
-
-        [
-            Line::new(tl, tr),
-            Line::new(tr, br),
-            Line::new(br, bl),
-            Line::new(bl, tl),
-        ]
     }
 }
 
