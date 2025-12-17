@@ -1,3 +1,4 @@
+mod combo;
 mod debug;
 mod input;
 
