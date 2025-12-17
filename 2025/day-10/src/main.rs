@@ -1,8 +1,10 @@
 mod debug;
 mod input;
 
-// cspell:words joltage joltages
+use self::debug::BitMask;
 use self::input::Machine;
+
+// cspell:words joltage joltages
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -13,25 +15,32 @@ fn main() {
         println!("All machines: {machines:#?}\n");
     }
 
-    let mut min_total = 0;
-    for machine in &machines {
-        let min = min_presses_lights(machine).expect("all puzzle machines should have at least one solution");
-        min_total += min;
+    let mut lights_total = 0;
+    let mut joltage_total = 0;
+    for (i, machine) in machines.iter().enumerate() {
+        if aoc_utils::verbosity() >= 1 {
+            // Just print the machine, the two other functions will do the rest of the debug output.
+            println!("Machine #{i:>3}: {machine:#?}", i = i + 1);
+        }
+
+        lights_total += min_presses_lights(machine);
+        joltage_total += min_presses_joltages(machine);
     }
 
-    println!("Fewest button presses required to configure all machines' lights (part 1): {min_total}");
+    println!("Fewest button presses to configure all machines' lights (part 1): {lights_total}");
+    println!("Fewest button presses to configure all machines' joltage counters (part 2): {joltage_total}");
 }
 
-/// Checks if the `i`th bit "from the left" (where "the left" is determined by the width) is set in a bit-mask.
+/// Checks if the `i`'th bit is set in a bit-mask.
 #[inline]
-fn bit_set(x: u32, i: usize, w: usize) -> bool {
-    (x >> (w - 1 - i) & 1) > 0
+fn bit_set(x: u32, i: usize) -> bool {
+    ((x >> i) & 1) > 0
 }
 
 /// Finds the minimum number of button presses required to configure the lights on a [Machine].
 ///
 /// If there is no possible way to achieve the desired lighting configuration on the machine, `None` is returned.
-fn min_presses_lights(machine: &Machine) -> Option<usize> {
+fn min_presses_lights(machine: &Machine) -> usize {
     // - The lights on the machine form a bit-mask
     // - The buttons control certain lights: they are also a bit-mask, and toggling them is an XOR.
     // - XOR is commutative, associative, and is its own inverse; if `C = A ^ B`, then `C ^ A = B`.
@@ -52,8 +61,8 @@ fn min_presses_lights(machine: &Machine) -> Option<usize> {
         let mut lights = 0u32;
         for i in 0..num_buttons {
             // If the i'th bit is set, test this button.
-            if bit_set(mask, i, num_buttons) {
-                lights ^= buttons[i];
+            if bit_set(mask, i) {
+                lights ^= buttons[i].mask();
             }
         }
 
@@ -67,25 +76,29 @@ fn min_presses_lights(machine: &Machine) -> Option<usize> {
         }
     }
 
-    if aoc_utils::verbosity() >= 1
-        && let Some(min) = min_presses
-    {
-        println!("{min:>2} for machine: {machine:#?}");
+    let min_presses = min_presses.expect("all puzzle machines should have at least one solution");
+    let min_buttons = min_buttons.unwrap();
+
+    if aoc_utils::verbosity() >= 1 {
+        println!("    Minimum button presses for lights: {min_presses}");
     }
 
-    if aoc_utils::verbosity() >= 2
-        && let Some(mask) = min_buttons
-    {
-        println!("    Buttons: ({:?})", debug::BitMask::dbg(mask, num_buttons).chars('_', '↓').red());
-        if aoc_utils::verbosity() >= 3 {
-            for i in 0..num_buttons {
-                if bit_set(mask, i, num_buttons) {
-                    let button = buttons[i];
-                    println!("    Button #{i:2}: ({:?})", debug::BitMask::dbg(button, machine.size()).white());
-                }
+    if aoc_utils::verbosity() >= 2 {
+        println!("        Buttons: ({:?})", BitMask::dbg(min_buttons, num_buttons).chars('_', '↓').red());
+    }
+
+    if aoc_utils::verbosity() >= 3 {
+        for i in 0..num_buttons {
+            if bit_set(min_buttons, i) {
+                let button = buttons[i].mask();
+                println!("        Button #{i:2}: ({:?})", BitMask::dbg(button, machine.size()).white());
             }
         }
     }
 
     min_presses
+}
+
+fn min_presses_joltages(machine: &Machine) -> usize {
+    todo!("part 2");
 }

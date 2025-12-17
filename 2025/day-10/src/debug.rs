@@ -2,14 +2,19 @@ use std::fmt::Debug;
 
 use crate::bit_set;
 
-/// Debugging helper that prints a bit-mask as ASCII characters.
+/// Debugging helper that prints a bit-mask as ASCII characters, with the most-significant bit all the way to the left.
+/// This requires knowing the intended length of the bit string.
 ///
 /// For Example:
 ///
 /// ```
 /// let s = format!("{:?}", BitMask::dbg(0b_00011101, 8));
-/// assert_eq!(s, "...###.#");
+/// assert_eq!(s, "10111000");
 /// ```
+///
+/// This makes it so that "bit 0", as determined by *significance,* is also "bit 0" as determined by reading order. This
+/// is so that a **string** of digits (or characters interpreted as digits, like `.`/`#`), indexed by character position
+/// like "position 4", will be printed correctly even when said "position 4" is stored internally as `1 << 4`.
 pub struct BitMask {
     mask: u32,
     width: usize,
@@ -23,20 +28,6 @@ enum Color {
     Gray,
     Green,
     White,
-}
-
-/// Debugging helper that, given a bit-mask, prints a comma-separated list of the indices of the bits that are set in
-/// it **indexed in left-to-right reading order.**
-///
-/// For example:
-///
-/// ```
-/// let s = format!("{:?}", BitPositions::dbg(0b_010110, 6));
-/// assert_eq!(s, "1,3,4")
-/// ```
-pub struct BitPositions {
-    mask: u32,
-    width: usize,
 }
 
 impl BitMask {
@@ -66,12 +57,6 @@ impl BitMask {
     }
 }
 
-impl BitPositions {
-    pub const fn dbg(mask: u32, width: usize) -> Self {
-        Self { mask, width }
-    }
-}
-
 const ANSI_RED: &str = "\x1b[38;5;9m";
 const ANSI_GRAY: &str = "\x1b[38;5;7m"; // Technically the non-bright "white"
 const ANSI_GREEN: &str = "\x1b[38;5;10m";
@@ -90,7 +75,7 @@ impl Debug for BitMask {
         };
 
         for i in 0..self.width {
-            if bit_set(self.mask, i, self.width) {
+            if bit_set(self.mask, i) {
                 write!(f, "{ansi_color}{char1}")?;
             } else {
                 write!(f, "{ANSI_BLACK}{char0}")?;
@@ -98,22 +83,8 @@ impl Debug for BitMask {
         }
         write!(f, "{ANSI_RESET}")?;
 
-        Ok(())
-    }
-}
-
-impl Debug for BitPositions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut need_comma = false;
-        for i in 0..self.width {
-            // Is the i'th bit set?
-            if bit_set(self.mask, i, self.width) {
-                match need_comma {
-                    true => write!(f, ",")?,
-                    false => need_comma = true,
-                }
-                write!(f, "{i}")?;
-            }
+        if f.alternate() {
+            write!(f, "/{ANSI_BLACK}{:0n$b}{ANSI_RESET}", self.mask, n = self.width)?;
         }
 
         Ok(())

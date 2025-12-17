@@ -3,19 +3,21 @@
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use crate::debug::{BitMask, BitPositions};
+use crate::debug::BitMask;
 
 #[derive(Clone)]
 pub struct Machine {
-    /// The buttons on this machine. Each button toggles a specific set of lights, represented by a bit-mask.
-    buttons: Vec<u32>,
     /// The bit pattern of the desired lights on this machine.
     lights: u32,
+    /// The buttons on this machine. Each button toggles a specific set of lights, represented by a bit-mask.
+    buttons: Box<[Button]>,
     /// The joltage requirements for this machine.
-    joltages: Vec<u32>,
+    joltages: Box<[u32]>,
 }
 
-#[allow(unused)]
+#[derive(Clone)]
+pub struct Button(Box<[usize]>);
+
 impl Machine {
     /// Returns the "size" of this machine: the number of lights it has in its lighting diagram.
     pub fn size(&self) -> usize {
@@ -28,7 +30,7 @@ impl Machine {
     }
 
     /// Gets the button descriptions on this machine.
-    pub fn buttons(&self) -> &[u32] {
+    pub fn buttons(&self) -> &[Button] {
         &self.buttons
     }
 
@@ -38,39 +40,84 @@ impl Machine {
     }
 }
 
+impl Button {
+    /// Gets a bit-mask made up of all the positions this button affects.
+    pub fn mask(&self) -> u32 {
+        let mut mask = 0;
+        for &i in &self.0 {
+            mask |= 1 << i;
+        }
+        mask
+    }
+
+    /// Gets a list of all the positions this button activates.
+    pub fn positions(&self) -> &[usize] {
+        &self.0
+    }
+}
+
 impl FromStr for Machine {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // I love state machines, raaaahh!!
+        #[rustfmt::skip]
+        enum State {
+            Empty,
+            LightsDone { lights: u32, n: usize, buttons: Vec<Button> },
+            AllDone { lights: u32, buttons: Vec<Button>, joltages: Vec<u32> },
+        }
+
         // Thankfully, all the pieces in the input contain no whitespace within them
         let mut pieces = s.split_whitespace();
+        let mut state = State::Empty;
 
-        let lights = pieces.next().ok_or("machine description is empty")?;
-        let (lights, n) = parse_light_diagram(lights)?;
-
-        let mut buttons = Vec::new();
-        let joltages;
-        loop {
-            // If we run out of pieces before breaking ourselves later, input is malformed.
-            let Some(piece) = pieces.next() else {
-                if buttons.len() == 0 {
-                    return Err("machine description is missing at least one button schematic");
-                } else {
-                    return Err("machine description is missing joltage requirements");
-                }
-            };
-
-            if piece.starts_with('(') && piece.ends_with(')') {
-                buttons.push(parse_button(&piece[1..piece.len() - 1], n)?);
-            } else if piece.starts_with('{') && piece.ends_with('}') {
-                joltages = parse_joltage(&piece[1..piece.len() - 1], n)?;
-                break;
-            } else {
-                return Err("machine description contains invalid segment");
+        while let Some(piece) = pieces.next() {
+            match state {
+                State::Empty => {
+                    // First piece needs to be lights.
+                    let (lights, n) = parse_light_diagram(piece)?;
+                    state = State::LightsDone { lights, n, buttons: Vec::new() };
+                },
+                State::LightsDone { lights, n, mut buttons, .. } => {
+                    if let Some(piece) = surrounded_by(piece, '(', ')') {
+                        buttons.push(parse_button(piece, n)?);
+                        state = State::LightsDone { lights, n, buttons }
+                    } else if let Some(piece) = surrounded_by(piece, '{', '}') {
+                        let joltages = parse_joltages(piece, n)?;
+                        state = State::AllDone { lights, buttons, joltages };
+                    } else {
+                        return Err("machine description contains invalid segment");
+                    }
+                },
+                State::AllDone { .. } => return Err("machine description contains extra components"),
             }
         }
 
-        Ok(Machine { buttons, lights, joltages })
+        const ERR_EMPTY: &str = "machine description is empty";
+        const ERR_NO_BUTTONS: &str = "machine description is missing at least one button schematic";
+        const ERR_NO_JOLTAGE: &str = "machine description is missing joltage requirements";
+
+        match state {
+            State::Empty => Err(ERR_EMPTY),
+            State::LightsDone { buttons, .. } if buttons.len() == 0 => Err(ERR_NO_BUTTONS),
+            State::LightsDone { .. } => Err(ERR_NO_JOLTAGE),
+            State::AllDone { lights, buttons, joltages } => Ok(Machine {
+                lights,
+                buttons: buttons.into_boxed_slice(),
+                joltages: joltages.into_boxed_slice(),
+            }),
+        }
+    }
+}
+
+fn surrounded_by(s: &str, before: char, after: char) -> Option<&str> {
+    if s.starts_with(before) && s.ends_with(after) {
+        let start = before.len_utf8();
+        let end = s.len() - after.len_utf8();
+        Some(&s[start..end])
+    } else {
+        None
     }
 }
 
@@ -89,9 +136,7 @@ fn parse_light_diagram(s: &str) -> Result<(u32, usize), &'static str> {
             _ => return Err("machine light diagram contained invalid characters"),
         };
 
-        // We want the lighting pattern to match what we see in the diagram: MSB is left. So for 4 characters, the 1st
-        // bit needs to be shifted over 3 times, the 2nd 2 times, the 3rd 1 time, and the 4th 0 times.
-        lights |= b << (n - 1 - i);
+        lights |= b << i;
     }
 
     if n == 0 {
@@ -101,27 +146,31 @@ fn parse_light_diagram(s: &str) -> Result<(u32, usize), &'static str> {
     Ok((lights, n))
 }
 
-fn parse_button(s: &str, n: usize) -> Result<u32, &'static str> {
-    let positions = s.split(',');
+fn parse_button(s: &str, n: usize) -> Result<Button, &'static str> {
+    let bits = s.split(',');
 
     // Now set the i'th bit for each number specified.
-    let mut button = 0u32;
-    for i in positions {
-        let i = i
-            .parse::<usize>()
-            .map_err(|_| "machine button schematic contained invalid integers")?;
-
-        if i >= n {
-            return Err("machine button schematic referenced more lights than exist on light diagram");
+    let mut positions = Vec::new();
+    for bit in bits {
+        let bit = bit.parse().map_err(|_| "machine button schematic contained invalid integers")?;
+        if bit >= n {
+            return Err("machine button schematic contains higher-indexed light than exists on light diagram");
         }
 
-        button |= 1 << (n - 1 - i);
+        positions.push(bit);
     }
 
-    Ok(button)
+    if positions.len() == 0 {
+        return Err("machine button schematic is empty");
+    }
+
+    // The positions should also be sorted in ascending order, and we shouldn't have any duplicates.
+    positions.sort_unstable();
+    positions.dedup();
+    Ok(Button(positions.into_boxed_slice()))
 }
 
-fn parse_joltage(s: &str, n: usize) -> Result<Vec<u32>, &'static str> {
+fn parse_joltages(s: &str, n: usize) -> Result<Vec<u32>, &'static str> {
     let mut bits = s.split(',');
 
     let mut joltages = Vec::with_capacity(n);
@@ -149,8 +198,8 @@ impl Debug for Machine {
         write!(f, "[{:?}]", BitMask::dbg(self.lights, self.size()).chars('.', '#').green())?;
 
         // Write buttons:
-        for &button in &self.buttons {
-            write!(f, " ({:?})", BitPositions::dbg(button, self.size()))?;
+        for button in &self.buttons {
+            write!(f, " {:?}", button)?;
         }
 
         // Write joltages:
@@ -161,6 +210,18 @@ impl Debug for Machine {
         }
         write!(f, "}}")?;
 
+        Ok(())
+    }
+}
+
+impl Debug for Button {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let b0 = self.0[0];
+        write!(f, "({b0}")?;
+        for i in 1..self.0.len() {
+            write!(f, ",{}", self.0[i])?;
+        }
+        write!(f, ")")?;
         Ok(())
     }
 }
