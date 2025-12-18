@@ -54,6 +54,13 @@ impl Button {
     pub fn positions(&self) -> &[usize] {
         &self.0
     }
+
+    /// Apply this button's joltage changes to the given cells.
+    pub fn apply(&self, cells: &mut [u32]) {
+        for &i in self.positions() {
+            cells[i] += 1;
+        }
+    }
 }
 
 impl FromStr for Machine {

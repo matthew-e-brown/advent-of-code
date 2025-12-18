@@ -76,8 +76,8 @@
 //! │ - (57 A, 2 B, 0 C, 0 D)                                                               │
 //! │ - (57 A, 1 B, 1 C, 0 D)                                                               │
 //! │ - (57 A, 1 B, 0 C, 1 D)                                                               │
+//! │ - (57 A, 0 B, 2 C, 0 D)                                                               │
 //! │ - ...                                                                                 │
-//! │ -                                                                                     │
 //! └───────────────────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
@@ -197,7 +197,43 @@
 //!     all correctly be given a value of zero.
 //!
 //! With that out of the way, we can get started!
+//!
+//! ## Extra edge-case
+//!
+//! After the first on the example input, I quickly hit a snag. The example required combinations of size 3 drawn from
+//! `[4, 5]` (buttons 4 and 5). However, after the second decrement, we actually got `(2, 0)`! Really what we wanted in
+//! that case was for the first counter to decrement and refresh the last one back up to `2`.
+//!
+//! ```no_run
+//! - [Iter4 { n: 3, k: 3 }, Iter5 { n: 0, k: 0 }]
+//!   - .poll().    // Yields (3, 0).
+//!   - .advance(). // Iter5 is exhausted, so Iter4 decrements to { n: 3, k: 2 }
+//!                 // Iter5 is recreated as { n: 1, k: 1 }
+//! - [Iter4 { n: 3, k: 2 }, Iter5 { n: 1, k: 1 }]
+//!   - .poll().    // Yields (2, 1).
+//!   - .advance(). // Iter5 decrements to { n: 1, k: 0 }
+//!                 // Since `k < n`, it's up to Iter5's children to supply the rest of `n`.
+//!                 // But, there aren't enough children! So, actually, Iter4 *also* needs to decrement.
+//!                 // Iter4 decrements to { n: 3, k: 1 }
+//!                 // Iter5 is recreated as { n: 2, k: 2 }
+//! - [Iter4 { n: 3, k: 1 }, Iter5 { n: 2, k: 2 }]
+//!   - .poll().    // Yields (1, 2)
+//!   - .advance(). // Iter5 decrements to { n: 2, k: 1 }
+//!                 // Since `k < n`, Iter5's children need to supply the remaining `n - k`.
+//!                 // But there aren't any more children! So now, once again, Iter4 needs to decrement.
+//!                 // Iter4 decrements to { n: 3, k: 0 }
+//! - [Iter4 { n: 3, k: 0 }, Iter5 { n: 3, k: 3 }]
+//!   - .poll().    // Yields (0, 3)
+//!   - .advance(). // Iter5 decrements to { n: 3, k: 2 }
+//!                 // `k < n` again, so Iter5 looks to its children.
+//!                 // But there are no more children! Iter4 decrements.
+//!                 // But Iter4 cannot decrement any more.
+//!                 // Therefore, iteration is complete.
+//! // Our final yields were:
+//! - [(3,0), (2,1), (1,2), (0,3)]
+//! ```
 
+use std::fmt::Debug;
 use std::mem::MaybeUninit;
 
 /// An iterator over all possible combinations of a given set of elements, selected with replacement `r` at a time.
@@ -231,18 +267,10 @@ impl<'a, T> Combinations<'a, T> {
     /// Creates a new iterator over all possible combinations (order-agnostic) of the given options, selected `r` at a
     /// time, selected with replacement.
     pub fn new(options: &'a [T], r: usize) -> Self {
-        // - `0 choose r` is zero for any possible `r`; there are no ways to choose anything from zero options.
-        // - `n choose r` is also zero whenever `n < r`; there are no ways to select more than `n` things from `n`
-        //   options.
+        // If there are no options to choose from, we don't need a buffer: it's not possible to choose `r` things from
+        // zero choices.
         let n = options.len();
-        let buf = if n == 0 || n < r {
-            // In either case, we don't panic. Instead, use a zero-sized vec to avoid even allocating in the first
-            // place, since the first `.next` call will return `None` (see the bottom of `Counter::advance`).
-            Box::new_uninit_slice(0)
-        } else {
-            Box::new_uninit_slice(r)
-        };
-
+        let buf = Box::new_uninit_slice(if n == 0 { 0 } else { r });
         Self {
             options,
             counter: Counter::new(n, r),
@@ -258,7 +286,7 @@ impl<'a, T> Combinations<'a, T> {
         for (choice, &count) in counts.iter().enumerate() {
             let choice = &self.options[choice];
             for i in start..start + count {
-                // SAFETY: It's fine to replace the old values
+                // SAFETY: It's fine to replace the old values without dropping them, since `&T` has no drop impl.
                 self.buf[i].write(choice);
             }
             start += count;
@@ -266,7 +294,7 @@ impl<'a, T> Combinations<'a, T> {
 
         // Now we need to yield a reference to our initialized buffer.
 
-        assert!(start == self.buf.len(), "ComboCounter did not fill entire buffer with choices");
+        assert!(start == self.buf.len(), "Counter did not return {} total choices", self.buf.len());
 
         let ptr = self.buf.as_ptr().cast::<&'a T>();
         let len = self.buf.len();
@@ -297,27 +325,17 @@ struct Counter {
 impl Counter {
     /// Creates a new counter that yields the "shape" of all distinct "`n choose r`" combinations with replacement.
     pub fn new(n: usize, r: usize) -> Self {
-        if n == 0 || n < r {
-            // Same edge-case as in `Combinations::new`. Use a zero-sized vec to avoid even allocating in the first
-            // place, since the first `.next` call will return `None`.
-            Self {
-                choose: r,
-                counters: vec![0; 0].into_boxed_slice(),
-            }
+        // How many `r`-sized combinations are there of 0 things, even if you allow repetition? None. So we'll avoid
+        // even allocating a buffer.
+        if n == 0 {
+            let counters = vec![0; 0].into_boxed_slice();
+            Self { choose: 0, counters }
         } else {
             // We need one counter for each of the possible choices. But the first thing we want to yield is `choose` of
             // the first option, and we're going to decrement before that; so the first counter needs to get pre-seeded.
             let mut counters = vec![0; n].into_boxed_slice();
             counters[0] = r + 1;
             Self { choose: r, counters }
-        }
-    }
-
-    /// Resets this counter to its initial state.
-    pub fn reset(&mut self) {
-        if self.counters.len() > 0 {
-            self.counters[0] = self.choose + 1;
-            self.counters[1..].fill(0);
         }
     }
 
@@ -330,29 +348,37 @@ impl Counter {
     fn advance(&mut self) -> bool {
         // Work from the back:
         for i in (0..self.counters.len()).rev() {
-            // Can the last one decrement?
-            if self.counters[i] > 0 {
-                // If so, decrement it. Then, reset all counters after this one.
-                self.counters[i] -= 1;
-
-                if i < self.counters.len() - 1 {
-                    let j = i + 1;
-                    // The starting value of the next counter is equal to the *total* overall number of choices we need,
-                    // *minus* the current values of all counters before it. e.g., if we need 59 choices total, and the
-                    // first three already have.
-                    let k = self.choose - self.counters[0..j].iter().fold(0, |a, c| a + c);
-                    self.counters[j] = k;
-                    self.counters[j + 1..].fill(0);
-                }
-
-                return true;
-            } else {
+            // Can this counter decrement?
+            match self.counters[i].checked_sub(1) {
+                // If so, decrement it, then refresh all children.
+                Some(k) => {
+                    self.counters[i] = k;
+                    // ...Unless it's the last counter. In that case, we want to let the loop advance down and decrement
+                    // the parent counter, which will reset this one.
+                    if i != self.counters.len() - 1 {
+                        // The starting value of the next counter is equal to the total required `n`, minus the amount
+                        // already covered by the `k` values up to and including this one. Everything else restarts at
+                        // zero.
+                        self.counters[i + 1..].fill(0);
+                        self.counters[i + 1] = self.choose - self.counters[0..=i].iter().fold(0, |a, c| a + c);
+                        return true;
+                    } else if i == 0 {
+                        // ...Unless it's *also* the first counter. The only way index 0 can be the last index can be if
+                        // there's only one counter. In that case, we have just exhausted our single possible option of
+                        // returning `n` once. [NOTE]: since we want to do that thing where we `advance` before we
+                        // `poll`, we need to account for the edge-case of the first decrement by checking if the
+                        // counter just turned from `n+1` into `n`. If we were actually doing the `poll`/`advance` thing
+                        // as described above,
+                        return self.counters[i] == self.choose;
+                    } else {
+                        continue;
+                    }
+                },
                 // If we can't decrement, there are two cases:
                 // 1. This is the first counter. In this case, we're completely finished; return false.
                 // 2. The counter before us needs to decrement. We simply let the loop advance to the parent.
-                if i == 0 {
-                    return false;
-                }
+                None if i > 0 => continue,
+                None => return false,
             }
         }
 
