@@ -143,7 +143,7 @@ fn min_presses_joltages(machine: &Machine) -> u64 {
     // the current joltage values are after pressing those buttons.
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct State {
-        presses: u64,
+        presses: u32,
         cells: Box<[u32]>,
     }
 
@@ -220,12 +220,12 @@ fn min_presses_joltages(machine: &Machine) -> u64 {
                     }
                     next_level.insert(state);
                 } else if aoc_utils::verbosity() >= 4 {
-                    println!("\t\t\t\tNo valid configurations in this branch. Dropping branch.");
+                    println!("\t\t\t\tNo valid configurations in this branch. Dropping state.");
                 }
             } else {
                 // Try all the possible buttons that will bring it up to that level.
                 let mut combinations = Combinations::new(&active_buttons[..], presses_needed as usize);
-                while let Some(combo) = combinations.next() {
+                'combo: while let Some(combo) = combinations.next() {
                     let mut state = state.clone();
 
                     if aoc_utils::verbosity() >= 4 {
@@ -233,9 +233,21 @@ fn min_presses_joltages(machine: &Machine) -> u64 {
                     }
 
                     // Apply all the buttons in this combination:
-                    state.presses += presses_needed as u64;
+                    state.presses += presses_needed;
                     for &&idx in combo {
-                        buttons[idx].apply(&mut state.cells);
+                        let button = &buttons[idx];
+                        for &i in button.positions() {
+                            state.cells[i] += 1;
+                            let desired = machine.desired_joltages()[i];
+                            if state.cells[i] > desired {
+                                if aoc_utils::verbosity() >= 4 {
+                                    println!(
+                                        "Combo would overflow joltage level of {desired} in cell {i}. Dropping state."
+                                    );
+                                }
+                                continue 'combo;
+                            }
+                        }
                     }
 
                     if aoc_utils::verbosity() >= 4 {
@@ -270,5 +282,5 @@ fn min_presses_joltages(machine: &Machine) -> u64 {
         println!("\tMinimum button presses for joltages: {min_presses}");
     }
 
-    min_presses
+    min_presses as u64
 }
