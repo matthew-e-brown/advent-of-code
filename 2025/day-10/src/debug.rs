@@ -84,6 +84,7 @@ impl BitfieldPrinter {
     }
 }
 
+#[allow(unused)]
 impl BitIndicesPrinter {
     /// Updates the separator this printer uses.
     pub const fn sep(self, sep: &'static str) -> Self {

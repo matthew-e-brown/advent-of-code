@@ -21,8 +21,8 @@ const BITFIELD_BITS: usize = Bitfield::BITS as usize;
 #[derive(Clone)]
 pub struct Machine {
     pub lights: Bitfield,
-    pub buttons: Vec<Bitfield>,
-    pub joltages: Vec<Joltage>,
+    pub buttons: Box<[Bitfield]>,
+    pub joltages: Box<[Joltage]>,
 }
 
 impl FromStr for Machine {
@@ -60,11 +60,17 @@ impl FromStr for Machine {
 
         let (lights, n) = lights.ok_or_else(|| format_err("missing lighting diagram"))?;
 
-        if buttons.len() < 1 {
+        let buttons = if buttons.len() < 1 {
             return Err(format_err("at least one button is required"));
-        }
+        } else if buttons.len() > usize::BITS as usize {
+            return Err(format_err("at most usize::BITS buttons are allowed"));
+        } else {
+            buttons.into_boxed_slice()
+        };
 
-        let joltages = joltages.ok_or_else(|| format_err("missing joltage requirements"))?;
+        let joltages = joltages
+            .ok_or_else(|| format_err("missing joltage requirements"))?
+            .into_boxed_slice();
 
         if joltages.len() != n {
             return Err(format_err("lighting diagram and joltage requirements should have the same size"));
