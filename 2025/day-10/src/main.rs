@@ -1,5 +1,7 @@
+mod debug;
 mod input;
 
+use self::debug::BitDebugExt;
 use self::input::{Bitfield, Joltage, Machine};
 
 // cspell:words joltage joltages
@@ -10,22 +12,26 @@ fn main() {
     let mut lights_presses_total = 0u64;
     let mut joltage_presses_total = 0u64;
     for (i, line) in input.lines().enumerate() {
-        let Machine { lights, buttons, mut joltages } = line.parse().expect("puzzle input should be valid");
+        let i = i + 1;
 
+        let machine = line.parse().expect("puzzle input should be valid");
         if aoc_utils::verbosity() >= 1 {
-            println!("Machine #{i}:", i = i + 1);
+            println!("Machine #{i}: {machine:#?}");
         }
 
+        let Machine { lights, buttons, mut joltages } = machine;
+
         // Part 1:
-        let light_buttons = min_buttons_for_parity(&buttons, lights);
-        lights_presses_total += light_buttons.count_ones() as u64;
+        let light_presses = min_buttons_for_parity(&buttons, lights).count_ones() as u64;
+        lights_presses_total += light_presses;
 
         // Part 2:
         let joltage_presses = min_presses_for_joltages(&buttons, &mut joltages);
         joltage_presses_total += joltage_presses;
 
         if aoc_utils::verbosity() >= 1 {
-            println!("Machine #{i} joltage presses: {joltage_presses}\n", i = i + 1);
+            println!("Machine #{i} presses for lights: {light_presses}");
+            println!("Machine #{i} presses for joltage: {joltage_presses}\n");
         }
     }
 
@@ -39,6 +45,8 @@ macro_rules! bit_set {
         (($x >> $i) & 1) == 1
     };
 }
+
+pub(crate) use bit_set;
 
 /// Gets the minimum possible set of buttons required to achieve the given parity.
 ///
@@ -90,11 +98,13 @@ fn min_presses_for_joltages(buttons: &[Bitfield], counters: &mut [Joltage]) -> u
     let parity_presses = parity_buttons.count_ones() as u64;
 
     if aoc_utils::verbosity() >= 1 {
-        println!("Joltage counters {counters:?} have parity {parity_bits:0n$b}", n = counters.len());
-        print!("\tButtons {parity_buttons:0n$b}:", n = buttons.len());
+        let parity = parity_bits.dbg_bitfield(counters.len()).chars('.', '#').cyan();
+        println!("\tJoltage counters {counters:?} have parity [{parity:?}]");
+        print!("\t\tButtons ({:?}):", parity_buttons.dbg_bit_indices().sep(","));
         for &button in buttons.iter().bit_filter(parity_buttons) {
-            print!(" ({button:0n$b})", n = counters.len());
+            print!(" ({:?})", button.dbg_bit_indices());
         }
+
         println!();
     }
 
@@ -107,7 +117,7 @@ fn min_presses_for_joltages(buttons: &[Bitfield], counters: &mut [Joltage]) -> u
     }
 
     if aoc_utils::verbosity() >= 1 {
-        print!("\tAfter applying button presses, counters are {counters:?}. ");
+        print!("\t\tAfter applying button presses, counters are {counters:?}. ");
     }
 
     // All remaining joltages should have an even parity. At the very least, they are divisible by two. However, we can

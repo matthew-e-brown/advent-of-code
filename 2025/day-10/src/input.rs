@@ -1,5 +1,8 @@
+use std::fmt::Debug;
 use std::num::IntErrorKind;
 use std::str::FromStr;
+
+use crate::debug::BitDebugExt;
 
 // cspell:words joltage joltages
 
@@ -15,7 +18,7 @@ pub type Joltage = usize;
 const BITFIELD_BITS: usize = Bitfield::BITS as usize;
 
 /// A machine in the factory.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Machine {
     pub lights: Bitfield,
     pub buttons: Vec<Bitfield>,
@@ -138,4 +141,53 @@ fn parse_joltages(s: &str) -> Result<Vec<Joltage>, &'static str> {
     }
 
     Ok(joltages)
+}
+
+impl Debug for Machine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        /// Helper that prints a bitfield like a button appears in the puzzle input.
+        struct Button(Bitfield);
+        impl Debug for Button {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "({:?})", self.0.dbg_bit_indices())
+            }
+        }
+
+        /// Helper that prints a list of buttons either with the classic `[]` debug-list format, or as space-separated
+        /// to match puzzle input.
+        struct ButtonList<'a>(&'a [Bitfield]);
+        impl<'a> Debug for ButtonList<'a> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let buttons = self.0.iter().copied().map(Button);
+                if f.alternate() {
+                    for button in buttons {
+                        write!(f, " {button:?}")?;
+                    }
+                    Ok(())
+                } else {
+                    f.debug_list().entries(buttons).finish()
+                }
+            }
+        }
+
+        let lights = self.lights.dbg_bitfield(self.joltages.len());
+        let buttons = ButtonList(&self.buttons);
+
+        if f.alternate() {
+            let lights = lights.chars('.', '#').green();
+            write!(f, "[{lights:?}]{buttons:#?}")?; // ButtonList's alternate mode handles the space
+            write!(f, " {{{:?}", self.joltages[0])?; // There is always at least one joltage
+            for j in &self.joltages[1..] {
+                write!(f, ",{j:?}")?;
+            }
+            write!(f, "}}")?;
+            Ok(())
+        } else {
+            f.debug_struct("Machine")
+                .field("lights", &lights)
+                .field("buttons", &buttons)
+                .field("joltages", &self.joltages)
+                .finish()
+        }
+    }
 }
