@@ -25,6 +25,14 @@ pub struct Machine {
     pub joltages: Box<[Joltage]>,
 }
 
+impl Machine {
+    /// Returns the "size" of this machine. This is the number of lights and the number of joltage counters present on
+    /// the machine.
+    pub const fn size(&self) -> usize {
+        self.joltages.len()
+    }
+}
+
 impl FromStr for Machine {
     type Err = String;
 
