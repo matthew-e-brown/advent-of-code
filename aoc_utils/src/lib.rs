@@ -46,3 +46,72 @@ macro_rules! count_bools {
         (<$type as ::std::convert::From<bool>>::from($bool))
     };
 }
+
+/// Exactly like the vanilla [`println!`] macro, but only prints when [verbosity] is at least a certain level (i.e.,
+/// based on the `-v` flag passed on the command-line).
+///
+/// # Example
+///
+/// ```
+/// # let x = 10;
+/// // This:
+/// vprintln!(2, "x = {x}.");
+///
+/// // Is equivalent to:
+/// if aoc_utils::verbosity() >= 2 {
+///     println!("x = {x}.");
+/// }
+/// ```
+///
+/// An `==` sign can be used to print only when verbosity is _exactly_ equal to the given value:
+///
+/// ```
+/// # let y = 5;
+/// vprintln!(== 1, "-v passed: y = {y}.")
+///
+/// if aoc_utils::verbosity() == 1 {
+///     println!("-v passed: y = {y}.");
+/// }
+/// ```
+#[macro_export]
+macro_rules! vprintln {
+    ($v:expr) => {
+        vprintln!($v,);
+    };
+    ($v:expr, $($args:tt)*) => {
+        if $crate::verbosity() >= $v {
+            println!($($args)*);
+        }
+    };
+    (== $v:expr) => {
+        vprintln!(== $v,);
+    };
+    (== $v:expr, $(args:tt)*) => {
+        if $crate::verbosity() == $v {
+            println!($($args)*);
+        }
+    };
+}
+
+/// Exactly like the vanilla [`print!`] macro, but only prints when [verbosity] is at least a certain level.
+///
+/// See [`vprintln!`] for examples.
+#[macro_export]
+macro_rules! vprint {
+    ($v:expr) => {
+        vprint!($v,);
+    };
+    ($v:expr, $($args:tt)*) => {
+        if $crate::verbosity() >= $v {
+            print!($($args)*);
+        }
+    };
+    (== $v:expr) => {
+        vprint!(== $v,);
+    };
+    (== $v:expr, $(args:tt)*) => {
+        if $crate::verbosity() == $v {
+            print!($($args)*);
+        }
+    };
+}
