@@ -3,13 +3,11 @@ mod input;
 
 use std::collections::HashMap;
 
-use aoc_utils::{vprint, vprintln};
+use aoc_utils::vprintln;
 
-use self::debug::BitDebugExt;
 use self::input::{Bitfield, Joltage, Machine};
 
 // cspell:words joltage joltages
-// cspell:ignore viprintln viprint
 
 /// In theory, it's possible to specify a machine whose lights or joltage counters are not possible to configure with
 /// their set of buttons. However, for Advent of Code input, all machines should be valid.
@@ -80,47 +78,25 @@ fn compute_parity_map(machine: &Machine) -> HashMap<Bitfield, Vec<usize>> {
         parity_combos.insert(parity, Vec::new());
     }
 
-    let mut num_unique = 0usize; // Track how many of the button combos lead to a unique parity, for debugging
     for button_mask in 0..=max_button_mask {
         let mut parity: Bitfield = 0;
         for &button in machine.buttons.iter().bit_filter(button_mask) {
             parity ^= button;
         }
 
-        let combos = parity_combos
+        parity_combos
             .get_mut(&parity)
-            .expect("all possible parity bitfields should already have a vec");
-        num_unique += (combos.len() == 0) as usize; // Is this the first combo we've found for this parity?
-        combos.push(button_mask);
+            .expect("all possible parity bitfields should already have a vec")
+            .push(button_mask);
     }
-
-    vprintln!(
-        2,
-        "\tPopulated parity map: \
-        2^{nb} = {} possible button combinations yield {num_unique} unique parity settings \
-        (of the maximum possible 2^{np} = {}).",
-        max_button_mask + 1,
-        max_parity_mask + 1,
-        nb = machine.buttons.len(),
-        np = machine.size(),
-    );
 
     parity_combos
 }
 
 /// Determines the optimal set of buttons to press to configure a machine's lights.
 fn configure_lights(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<usize>>) -> u64 {
-    vprintln!(2, "\tConfiguring lights:");
-
     // Get all the combinations that would yield the parity pattern for the machine's lights:
     let light_combos = &parity_combos[&machine.lights];
-
-    vprintln!(
-        2,
-        "\t\tFound {} possible button combinations that yield a parity of [{:?}].",
-        light_combos.len(),
-        machine.lights.dbg_bitfield(machine.size()).chars('.', '#').green(),
-    );
 
     // Then, find out which one has the fewest button presses:
     let light_presses = light_combos.iter().map(|button_mask| button_mask.count_ones() as u64);
@@ -129,8 +105,6 @@ fn configure_lights(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<usi
 
 /// Determines the optimal set of buttons to press to configure a machine's joltage counters.
 fn configure_joltages(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<usize>>) -> u64 {
-    vprintln!(2, "\tConfiguring joltages:");
-
     // To keep things fast, we'll use cache the optimal solutions for each of the possible joltage values, since the end
     // of the recursion tree will likely have a lot of repetition. Also, it's a good idea to cache whether or not the
     // even is a solution for that particular set of joltages, so we'll use an Option. We can initialize the solution
@@ -138,18 +112,6 @@ fn configure_joltages(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<u
     // zeroes.
     let mut joltage_solutions = HashMap::<Box<[Joltage]>, Option<u64>>::new();
     joltage_solutions.insert(vec![0; machine.joltages.len()].into(), Some(0));
-
-    // ----------------------------
-    // For debugging, we want to print our logs at increasing levels of indentation. This macro takes care of that.
-    #[rustfmt::skip]
-    macro_rules! viprintln {
-        ($v:expr, $depth:expr) => (viprintln!($v, $depth,));
-        ($v:expr, $depth:expr, $($tokens:tt)*) => {
-            vprint!($v, "{sp:i$}", sp = "", i = $depth * 8); // Print an empty string, padded to depth*8, first.
-            vprintln!($v, $($tokens)*);
-        };
-    }
-    // ----------------------------
 
     fn recurse(
         buttons: &[Bitfield],
@@ -161,7 +123,6 @@ fn configure_joltages(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<u
         // First, a preliminary check: do we already know how many button presses this particular set of joltages takes?
         // Note that this also covers the case of all zeroes.
         if let Some(answer) = joltage_solutions.get(&joltages).copied() {
-            viprintln!(3, depth, "\t\tOptimal solution for joltages {joltages:?} is cached: {answer:?}");
             return answer;
         }
 
@@ -169,10 +130,6 @@ fn configure_joltages(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<u
         // button combinations will yield that parity, if any?
         let curr_parity = parity(&joltages);
         let curr_combos = parity_combos[&curr_parity].as_slice(); // Could be empty!
-
-        let dbg_parity = curr_parity.dbg_bitfield(joltages.len()).chars('.', '#').cyan();
-        viprintln!(2, depth, "\t\tJoltages {joltages:?} have parity [{dbg_parity:?}].");
-        viprintln!(2, depth, "\t\tChecking {} possible button combinations.", curr_combos.len());
 
         // Okay, for each of those button combinations, which one yields the best solution? This will be `None` if there
         // are no possible button combos that lead to the desired parity.
@@ -188,9 +145,6 @@ fn configure_joltages(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<u
                     }
                 }
 
-                let dbg_mask = button_mask.dbg_bit_indices().sep("+");
-                viprintln!(3, depth, "\t\t\t-> Buttons ({dbg_mask:?}) yield joltages {next_joltages:?}.");
-
                 // At this point, if we can figure out the optimal way to reach `next_joltages`, we would simply have to
                 // perform `curr_presses` to get the final result we want. Since `curr_presses` were determined simply
                 // based on *parity*, applying them should leave all the joltages as even numbers. That is, they're all
@@ -200,16 +154,11 @@ fn configure_joltages(machine: &Machine, parity_combos: &HashMap<Bitfield, Vec<u
                     *joltage >>= 1;
                 }
 
-                let curr_presses = button_mask.count_ones() as u64;
                 let next_presses = recurse(buttons, next_joltages, parity_combos, joltage_solutions, depth + 1)?;
-
-                viprintln!(3, depth, "\t\t\t<- Solution for ({dbg_mask:?}) = {curr_presses} + {next_presses} × 2");
-
+                let curr_presses = button_mask.count_ones() as u64;
                 Some(curr_presses + (next_presses << 1))
             })
             .min();
-
-        viprintln!(3, depth, "\t\tOptimal solution: {min_presses:?}");
 
         // If we didn't already know the answer, store it before returning.
         joltage_solutions.insert(joltages, min_presses);
