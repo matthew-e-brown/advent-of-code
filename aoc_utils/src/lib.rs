@@ -55,7 +55,7 @@ macro_rules! count_bools {
 /// ```
 /// # let x = 10;
 /// // This:
-/// println_v!(2, "x = {x}.");
+/// vprintln!(2, "x = {x}.");
 ///
 /// // Is equivalent to:
 /// if aoc_utils::verbosity() >= 2 {
@@ -67,16 +67,16 @@ macro_rules! count_bools {
 ///
 /// ```
 /// # let y = 5;
-/// println_v!(== 1, "-v passed: y = {y}.")
+/// vprintln!(== 1, "-v passed: y = {y}.")
 ///
 /// if aoc_utils::verbosity() == 1 {
 ///     println!("-v passed: y = {y}.");
 /// }
 /// ```
 #[macro_export]
-macro_rules! println_v {
+macro_rules! vprintln {
     ($v:expr) => {
-        println_v!($v,);
+        vprintln!($v,);
     };
     ($v:expr, $($args:tt)*) => {
         if $crate::verbosity() >= $v {
@@ -84,7 +84,7 @@ macro_rules! println_v {
         }
     };
     (== $v:expr) => {
-        println_v!(== $v,);
+        vprintln!(== $v,);
     };
     (== $v:expr, $(args:tt)*) => {
         if $crate::verbosity() == $v {
@@ -95,11 +95,11 @@ macro_rules! println_v {
 
 /// Exactly like the vanilla [`print!`] macro, but only prints when [verbosity] is at least a certain level.
 ///
-/// See [`println_v!`] for examples.
+/// See [`vprintln!`] for examples.
 #[macro_export]
-macro_rules! print_v {
+macro_rules! vprint {
     ($v:expr) => {
-        print_v!($v,);
+        vprint!($v,);
     };
     ($v:expr, $($args:tt)*) => {
         if $crate::verbosity() >= $v {
@@ -107,7 +107,7 @@ macro_rules! print_v {
         }
     };
     (== $v:expr) => {
-        print_v!(== $v,);
+        vprint!(== $v,);
     };
     (== $v:expr, $(args:tt)*) => {
         if $crate::verbosity() == $v {

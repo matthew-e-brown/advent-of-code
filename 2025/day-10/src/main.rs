@@ -3,7 +3,7 @@ mod input;
 
 use std::collections::HashMap;
 
-use aoc_utils::println_v;
+use aoc_utils::vprintln;
 
 use self::input::{Bitfield, Joltage, Machine};
 
@@ -19,7 +19,7 @@ fn main() {
     let mut lights_presses_total = 0;
     let mut joltage_presses_total = 0;
     for (i, machine) in machines {
-        println_v!(1, "Machine #{i}: {machine:#?}");
+        vprintln!(1, "Machine #{i}: {machine:#?}");
 
         // Pressing a button toggles a light between on and off. We model this XORs on bitfields:
         //
@@ -38,8 +38,8 @@ fn main() {
         let light_presses = configure_lights(machine.lights, &parity_combos);
         let joltage_presses = configure_joltages(&machine.buttons, machine.joltages, &parity_combos);
 
-        println_v!(1, "\tPresses for lights: {light_presses}");
-        println_v!(1, "\tPresses for joltage: {joltage_presses}\n");
+        vprintln!(1, "\tPresses for lights: {light_presses}");
+        vprintln!(1, "\tPresses for joltage: {joltage_presses}\n");
 
         lights_presses_total += light_presses;
         joltage_presses_total += joltage_presses;
