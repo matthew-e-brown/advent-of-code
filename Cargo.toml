@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "2015/day-*",
     "2024/day-*",
     "2025/day-*",
     "aoc_utils",
