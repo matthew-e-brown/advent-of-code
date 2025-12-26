@@ -45,10 +45,16 @@ struct Args {
 
 /// Value-parser for use with clap.
 fn load_input(path: &str) -> std::io::Result<Input> {
-    let text = fs::read_to_string(path)?;
-    let path = path
-        .parse::<PathBuf>()
-        .expect("path must be valid if fs::read_to_string already succeeded");
+    let mut text = fs::read_to_string(path)?;
+
+    // Trim possible trailing newline at the end of a file
+    if text.ends_with("\r\n") {
+        text.truncate(text.len() - 2);
+    } else if text.ends_with("\n") {
+        text.truncate(text.len() - 1);
+    }
+
+    let path = path.parse::<PathBuf>().unwrap(); // PathBuf parse is infallible
     Ok(Input { path, text })
 }
 
