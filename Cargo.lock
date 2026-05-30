@@ -230,14 +230,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aoc2025_08"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "aoc_utils",
-]
-
-[[package]]
 name = "aoc2025_09"
 version = "0.1.0"
 dependencies = [
@@ -404,6 +396,14 @@ name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
+
+[[package]]
+name = "legacy_aoc2025_08_graph"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "aoc_utils",
+]
 
 [[package]]
 name = "libc"
