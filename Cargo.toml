@@ -4,4 +4,5 @@ members = [
     "2024/day-*",
     "2025/day-*",
     "aoc_utils",
+    "archive/*-day-*",
 ]
