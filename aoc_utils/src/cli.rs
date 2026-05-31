@@ -38,7 +38,8 @@ struct Args {
 
     /// Any per-program arguments to pass down to each puzzle.
     ///
-    /// Not all puzzles make use of additional arguments.
+    /// Not all puzzles make use of additional arguments. Those that do will usually provide help documentation using
+    /// `-?` or `--help`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     puzzle_args: Vec<OsString>,
 }
