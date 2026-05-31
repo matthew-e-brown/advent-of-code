@@ -56,19 +56,19 @@ impl DisjointSetUnion {
 
     /// Gets the representative index for the node at the given index.
     #[allow(unused)]
-    pub fn find_representative(&self, node_index: usize) -> usize {
+    pub fn find_rep(&self, node_index: usize) -> usize {
         match self.entry(node_index) {
             Entry::Root { size: _ } => node_index,
-            Entry::Child { next } => self.find_representative(next),
+            Entry::Child { next } => self.find_rep(next),
         }
     }
 
     /// Gets the representative index for the node at the given index, while also shortening the path to the root.
-    fn find_representative_and_compress(&mut self, node_index: usize) -> usize {
+    fn find_rep_and_compress(&mut self, node_index: usize) -> usize {
         match self.entry(node_index) {
             Entry::Root { size: _ } => node_index,
             Entry::Child { next } => {
-                let root = self.find_representative_and_compress(next);
+                let root = self.find_rep_and_compress(next);
                 self.set_parent(node_index, root);
                 root
             },
@@ -78,8 +78,8 @@ impl DisjointSetUnion {
     /// Joins the sets containing `i` and `j` together. Returns `true` if the two subsets were merged, and `false` if
     /// the they were already in the same subset.
     pub fn join_subsets(&mut self, index_i: usize, index_j: usize) -> bool {
-        let i = self.find_representative_and_compress(index_i);
-        let j = self.find_representative_and_compress(index_j);
+        let i = self.find_rep_and_compress(index_i);
+        let j = self.find_rep_and_compress(index_j);
         if i == j {
             false
         } else {

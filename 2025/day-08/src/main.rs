@@ -1,6 +1,7 @@
 mod set;
 
 use std::cmp::Reverse;
+use std::fmt::Display;
 use std::str::FromStr;
 
 use aoc_utils::clap;
@@ -69,13 +70,27 @@ fn main() {
     let mut final_x_product = None;
 
     for (i, j) in pairs {
+        // Used for verbose printing:
+        let p = pairs_connected + 1;
+
+        if aoc_utils::verbosity() >= 2 {
+            let ji = &junctions[i];
+            let jj = &junctions[j];
+            let ci = circuits.find_rep(i);
+            let cj = circuits.find_rep(j);
+            let dist = ji.dist_sq(&jj);
+            println!(
+                "Closest pair #{p}: {ji:>17} (#{i:4}, circuit #{ci:4}) and {jj:<17} (#{j:4}, circuit #{cj:4}), sq. dist = {dist}"
+            );
+        }
+
         circuits.join_subsets(i, j);
         pairs_connected += 1;
 
         // Part 1: we hit 1000! Now we can inspect the disjoint set and see how large all the circuits are.
         if pairs_connected == closest_n {
-            let mut circuit_sizes = circuits.sizes().map(|(_, size)| size).collect::<Vec<usize>>();
-            circuit_sizes.sort_unstable_by_key(|&size| Reverse(size));
+            let mut circuit_sizes = circuits.sizes().collect::<Vec<_>>();
+            circuit_sizes.sort_unstable_by_key(|&(_, size)| Reverse(size));
 
             if largest_m > circuit_sizes.len() {
                 panic!(
@@ -85,13 +100,32 @@ fn main() {
                 );
             }
 
-            largest_product = Some(circuit_sizes.into_iter().take(largest_m).reduce(|a, c| a * c).unwrap());
+            if aoc_utils::verbosity() >= 1 {
+                println!("\nCircuits after joining the closest {closest_n} pairs (index, size):\n{circuit_sizes:?}");
+                if aoc_utils::verbosity() >= 2 {
+                    println!();
+                }
+            }
+
+            largest_product = Some(
+                circuit_sizes
+                    .into_iter()
+                    .take(largest_m)
+                    .map(|(_, size)| size)
+                    .reduce(|a, c| a * c)
+                    .unwrap(),
+            );
         }
 
         // Part 2: keep going until we hit one single circuit. That is then the last pair we care about.
         if circuits.count() == 1 {
             let ji = &junctions[i];
             let jj = &junctions[j];
+
+            if aoc_utils::verbosity() >= 1 {
+                println!("\nPair #{p} was last needed to create one circuit: {ji} and {jj} (#{i:4} and #{j:4})\n");
+            }
+
             final_x_product = Some((ji.x as u64) * (jj.x as u64));
             break;
         }
@@ -142,6 +176,23 @@ impl FromStr for JunctionBox {
 
         let [x, y, z] = xyz;
         Ok(Self { x, y, z })
+    }
+}
+
+impl Display for JunctionBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Alignment;
+
+        let JunctionBox { x, y, z } = self;
+        let str = format!("{x},{y},{z}");
+
+        match (f.width(), f.align()) {
+            (Some(w), Some(Alignment::Left)) => write!(f, "{str:<w$}"),
+            (Some(w), Some(Alignment::Right)) => write!(f, "{str:>w$}"),
+            (Some(w), Some(Alignment::Center)) => write!(f, "{str:^w$}"),
+            (Some(w), None) => write!(f, "{str:w$}"),
+            (None, _) => write!(f, "{str}"),
+        }
     }
 }
 
