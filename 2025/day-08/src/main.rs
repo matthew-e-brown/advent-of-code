@@ -131,7 +131,9 @@ fn main() {
         }
     }
 
-    // Both of these are safe to unwrap: for part 1, we already checked the number was low enough
+    // Both of these are safe to unwrap. For part 1, we already checked that `closest_n` was low enough to be reached.
+    // For part 2, we are guaranteed to always end up with a single circuit: in the very worst case, we'll end up going
+    // through all possible pairs, but we will always end by connecting the last of them together.
     let largest_product = largest_product.unwrap();
     let final_x_product = final_x_product.unwrap();
     println!("Product of the largest {largest_m} circuits' sizes (part 1): {largest_product}");
