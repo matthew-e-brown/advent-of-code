@@ -1,4 +1,4 @@
-mod set;
+mod disjoint;
 
 use std::cmp::Reverse;
 use std::fmt::Display;
@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use aoc_utils::clap;
 
-use crate::set::DisjointSetUnion;
+use crate::disjoint::DisjointSet;
 
 // This puzzle requires additional input not present in the input text file.
 //
@@ -50,7 +50,7 @@ fn main() {
         .map(|line| line.parse().unwrap())
         .collect::<Vec<JunctionBox>>();
     let pairs = compute_sorted_pairs(&junctions[..]);
-    let mut circuits = DisjointSetUnion::new(junctions.len());
+    let mut circuits = DisjointSet::with_len(junctions.len());
 
     // Puzzle parameters depend slightly based on the size of the input:
     let Args { closest_n, largest_m, .. } = aoc_utils::parse_puzzle_args::<Args>();
@@ -76,8 +76,8 @@ fn main() {
         if aoc_utils::verbosity() >= 2 {
             let ji = &junctions[i];
             let jj = &junctions[j];
-            let ci = circuits.find_rep(i);
-            let cj = circuits.find_rep(j);
+            let ci = circuits.find_root(i);
+            let cj = circuits.find_root(j);
             let dist = ji.dist_sq(&jj);
             println!(
                 "Closest pair #{p}: {ji:>17} (#{i:4}, circuit #{ci:4}) and {jj:<17} (#{j:4}, circuit #{cj:4}), sq. dist = {dist}"
@@ -118,7 +118,7 @@ fn main() {
         }
 
         // Part 2: keep going until we hit one single circuit. That is then the last pair we care about.
-        if circuits.count() == 1 {
+        if circuits.num_sets() == 1 {
             let ji = &junctions[i];
             let jj = &junctions[j];
 
