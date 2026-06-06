@@ -81,13 +81,12 @@ pub enum ParseGridError {
 
 #[derive(Error, Debug, Clone)]
 pub enum TryParseGridError<E> {
-    /// The input being parsed into a grid was not square.
-    #[error("all rows of grid input must have the same width: line {0} is a different length")]
-    RowSize(usize),
+    #[error(transparent)]
+    Grid(#[from] ParseGridError),
 
     /// An error occurred from within a map function while attempting to parse grid input.
     #[error("map function returned Err while parsing input grid: {0}")]
-    MapFnError(E),
+    MapErr(E),
 }
 
 impl Grid<char> {
@@ -285,8 +284,8 @@ impl<T> Grid<T> {
     {
         match Self::try_from_lines_map::<I, S, _, Infallible>(lines, move |x, p| Ok(f(x, p))) {
             Ok(grid) => Ok(grid),
-            Err(TryParseGridError::RowSize(n)) => Err(ParseGridError::RowSize(n)),
-            Err(TryParseGridError::MapFnError(_)) => unreachable!(), // map_fn never returns Err
+            Err(TryParseGridError::Grid(e)) => Err(e),
+            Err(TryParseGridError::MapErr(_)) => unreachable!(), // map fn is infallible
         }
     }
 
@@ -316,18 +315,20 @@ impl<T> Grid<T> {
             if line.len() == w {
                 buf.reserve(line.len()); // NB: *not* `reserve_exact`
                 for (x, c) in line.chars().enumerate() {
-                    let res = f(c, (x, h)).map_err(TryParseGridError::MapFnError)?;
+                    let res = f(c, (x, h)).map_err(TryParseGridError::MapErr)?;
                     buf.push(res);
                 }
                 h += 1;
             } else {
-                return Err(TryParseGridError::RowSize(h + 1));
+                return Err(ParseGridError::RowSize(h + 1).into());
             }
         }
 
         let buf = buf.into_boxed_slice();
         Ok(Grid { w, h, buf })
     }
+
+    // [TODO] Make these take `self` and have the closures accept `T` instead of `&T`.
 
     /// Creates a new [Grid] with the same size as this one by applying a mapping function to each element.
     pub fn map<B, F>(&self, mut f: F) -> Grid<B>
@@ -347,7 +348,8 @@ impl<T> Grid<T> {
             .unwrap()
     }
 
-    /// Attempts to create a new [Grid] by applying a mapping function to all elements. If any fail,
+    /// Attempts to create a new [Grid] by applying a mapping function to all elements. If any invocations of `f` fail,
+    /// the first error is returned.
     pub fn try_map<B, F, E>(&self, f: F) -> Result<Grid<B>, E>
     where
         F: FnMut(&T) -> Result<B, E>,
@@ -357,6 +359,8 @@ impl<T> Grid<T> {
         Ok(Grid { buf, w: self.w, h: self.h })
     }
 
+    /// Attempts to create a new [Grid] by applying a mapping function to each element and its (x, y) position. If any
+    /// invocations of `f` fail, the first error is returned.
     pub fn try_map_entries<B, F, E>(&self, mut f: F) -> Result<Grid<B>, E>
     where
         F: FnMut(Pos, &T) -> Result<B, E>,
