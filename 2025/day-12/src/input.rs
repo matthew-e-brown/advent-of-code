@@ -183,6 +183,33 @@ impl PresentShape {
         self.points.sort_unstable_by(cmp_points);
     }
 
+    pub fn trim_shape(&mut self) {
+        // - Find the minimum and maximum x- and y-coordinates.
+        // - If the maxima are less than width/height, then width/height can be lowered.
+        // - If the minima are greater than 0, all points can be shifted towards zero by that amount.
+        let (min_x, max_x, min_y, max_y) = self
+            .points
+            .iter()
+            .copied()
+            .fold(None, |acc, (x, y)| match acc {
+                None => Some((x, x, y, y)),
+                Some((min_x, max_x, min_y, max_y)) => Some((min_x.min(x), max_x.max(x), min_y.min(y), max_y.max(y))),
+            })
+            .expect("all shapes should have at least one point");
+
+        self.width = max_x + 1;
+        self.height = max_y + 1;
+        if min_x > 0 || min_y > 0 {
+            self.transform_points(|(x, y)| (x - min_x, y - min_y));
+            self.width -= min_x;
+            self.height -= min_y;
+        }
+
+        // In theory, the above operation should keep things in the correct order...
+        // But it can't hurt to make sure!
+        self.sort_points();
+    }
+
     pub fn rotate_cw(&self, n: usize) -> Self {
         let mut shape = self.clone();
         for _ in 0..n {
