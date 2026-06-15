@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 pub type Point = (usize, usize);
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PresentShape {
     width: usize,
     height: usize,
@@ -20,6 +20,9 @@ pub struct Region {
     counts: Box<[usize]>,
 }
 
+#[expect(unused)] // Just to shut the warnings up for now.
+// `expect(unused)` over `allow(unused)` will turn this into an error when the last thing gets used; that way, we'll
+// know to remove this when the time comes.
 impl PresentShape {
     /// Returns the width of this shape's bounding box.
     pub fn width(&self) -> usize {
@@ -63,6 +66,7 @@ impl PresentShape {
     }
 }
 
+#[expect(unused)]
 impl Region {
     /// Returns the width of this region.
     pub fn width(&self) -> usize {
@@ -210,27 +214,27 @@ impl FromStr for Region {
 pub enum Transform {
     /// No transformation.
     #[default]
-    Identity,
+    Identity = 0,
     /// A 90° clockwise rotation.
-    RotateCW,
+    RotateCW = 1,
     /// A 180° rotation.
-    Rotate180,
+    Rotate180 = 2,
     /// A 90° counterclockwise rotation. Equivalent to a 270° clockwise rotation.
-    RotateCCW,
+    RotateCCW = 3,
     /// A reflection along the vertical axis (which moves points horizontally, from left to right).
-    ReflectV,
+    ReflectV = 4,
+    /// A reflection along the horizontal axis (which moves points vertically, from top to bottom).
+    ///
+    /// Equivalent to a horizontal reflection (one along the vertical axis) followed by a 180° clockwise rotation.
+    ReflectH = 5,
     /// A reflection along the line between the top-right and bottom-left corners.
     ///
     /// Equivalent to a horizontal reflection followed by a 90° clockwise rotation.
-    ReflectNE,
-    /// A reflection along the horizontal axis (which moves points vertically, from top to bottom).
-    ///
-    /// Equivalent to a horizontal reflection followed by a 180° clockwise rotation.
-    ReflectH,
+    ReflectNE = 6,
     /// A reflection along the line between the top-left and bottom-right corners.
     ///
     /// Equivalent to a horizontal reflection followed by a 270° clockwise rotation.
-    ReflectSE,
+    ReflectSE = 7,
 }
 
 impl Transform {
@@ -414,8 +418,12 @@ mod tests {
 
     /// Tests that shapes can be read to/from string format accurately and losslessly.
     mod inout {
+        use indoc::indoc;
+        use pretty_assertions::assert_eq;
+
         use super::*;
 
+        /// A test case for parsing/printing.
         struct TestCase {
             source: &'static str,
             expected_width: usize,
@@ -423,96 +431,432 @@ mod tests {
             expected_points: &'static [Point],
         }
 
-        impl TestCase {
-            const fn new(source: &'static str, w: usize, h: usize, points: &'static [Point]) -> Self {
-                TestCase {
-                    source,
-                    expected_width: w,
-                    expected_height: h,
-                    expected_points: points,
-                }
-            }
-        }
-
-        /// Shapes from the day 12 example problem.
-        ///
-        /// ```txt
-        /// 0:     1:     2:     3:     4:     5:
-        /// ###    ###    .##    ##.    ###    ###
-        /// ##.    ##.    ###    ###    #..    .#.
-        /// ##.    .##    ##.    ##.    ###    ###
-        /// ```
         #[rustfmt::skip]
         const CASES: &[TestCase] = &[
-            TestCase::new("###\n##.\n##.", 3, 3, &[
-                (0,0), (1,0), (2,0),
-                (0,1), (1,1),
-                (0,2), (1,2),
-            ]),
-            TestCase::new("###\n##.\n.##", 3, 3, &[
-                (0,0), (1,0), (2,0),
-                (0,1), (1,1),
-                       (1,2), (2,2),
-            ]),
-            TestCase::new(".##\n###\n##.", 3, 3, &[
-                       (1,0), (2,0),
-                (0,1), (1,1), (2,1),
-                (0,2), (1,2),
-            ]),
-            TestCase::new("##.\n###\n##.", 3, 3, &[
-                (0,0), (1,0),
-                (0,1), (1,1), (2,1),
-                (0,2), (1,2),
-            ]),
-            TestCase::new("###\n#..\n###", 3, 3, &[
-                (0,0), (1,0), (2,0),
-                (0,1),
-                (0,2), (1,2), (2,2),
-            ]),
-            TestCase::new("###\n.#.\n###", 3, 3, &[
-                (0,0), (1,0), (2,0),
-                       (1,1),
-                (0,2), (1,2), (2,2),
-            ]),
+            // Shapes from the day 12 example problem.
+            //
+            // ```txt
+            // 0:     1:     2:     3:     4:     5:
+            // ###    ###    .##    ##.    ###    ###
+            // ##.    ##.    ###    ###    #..    .#.
+            // ##.    .##    ##.    ##.    ###    ###
+            // ```
+            TestCase {
+                source: "###\n##.\n##.",
+                expected_width: 3,
+                expected_height: 3,
+                expected_points: &[
+                        (0,0), (1,0), (2,0),
+                        (0,1), (1,1),
+                        (0,2), (1,2),
+                ],
+            },
+            TestCase {
+                source: "###\n##.\n.##",
+                expected_width: 3,
+                expected_height: 3,
+                expected_points: &[
+                    (0,0), (1,0), (2,0),
+                    (0,1), (1,1),
+                           (1,2), (2,2),
+                ],
+            },
+            TestCase {
+                source: ".##\n###\n##.",
+                expected_width: 3,
+                expected_height: 3,
+                expected_points: &[
+                           (1,0), (2,0),
+                    (0,1), (1,1), (2,1),
+                    (0,2), (1,2),
+                ],
+            },
+            TestCase {
+                source: "##.\n###\n##.",
+                expected_width: 3,
+                expected_height: 3,
+                expected_points: &[
+                    (0,0), (1,0),
+                    (0,1), (1,1), (2,1),
+                    (0,2), (1,2),
+                ],
+            },
+            TestCase {
+                source: "###\n#..\n###",
+                expected_width: 3,
+                expected_height: 3,
+                expected_points: &[
+                    (0,0), (1,0), (2,0),
+                    (0,1),
+                    (0,2), (1,2), (2,2),
+                ],
+            },
+            TestCase {
+                source: "###\n.#.\n###",
+                expected_width: 3,
+                expected_height: 3,
+                expected_points: &[
+                    (0,0), (1,0), (2,0),
+                           (1,1),
+                    (0,2), (1,2), (2,2),
+                ],
+            },
+            // Additional hand-written test cases for rectangular inputs:
+            TestCase {
+                source: indoc! {r"
+                    #.....
+                    ......
+                    .....#
+                "}.trim_ascii_end(), // remove trailing newline from quote placement inside `indoc`
+                expected_width: 6,
+                expected_height: 3,
+                expected_points: &[(0,0), (5,2)],
+            },
+            TestCase {
+                source: indoc! {"
+                    #
+                    .
+                    #
+                "}.trim_ascii_end(),
+                expected_width: 1,
+                expected_height: 3,
+                expected_points: &[(0,0), (0,2)],
+            },
         ];
 
+        /// Tests that all test cases parse to the expected width, height, and set of points.
         #[test]
         fn parse() {
             for case in CASES {
-                let shape = PresentShape::from_str(case.source).unwrap();
-                assert!(shape.width() == case.expected_width, "shape width parsed incorrectly");
-                assert!(shape.height() == case.expected_height, "shape height parsed incorrectly");
-                assert!(shape.points() == case.expected_points, "shape points-list parsed incorrectly");
+                let shape = PresentShape::from_str(case.source).expect("test input should parse correctly");
+                assert_eq!(case.expected_width, shape.width(), "shape width parsed incorrectly");
+                assert_eq!(case.expected_height, shape.height(), "shape height parsed incorrectly");
+                assert_eq!(case.expected_points, shape.points(), "shape points-list parsed incorrectly");
             }
         }
 
+        /// Tests that all parsed shapes print to match their input representation.
         #[test]
         fn print() {
-            #[rustfmt::skip]
-            let shape = PresentShape::from_points([
-
-            ]);
-
-            todo!();
-        }
-
-        #[test]
-        fn round_trip() {
             for case in CASES {
-                let shape = PresentShape::from_str(case.source).unwrap();
+                let shape = PresentShape::from_str(case.source).expect("test input should parse correctly");
                 let string = shape.to_string();
-                assert!(case.source == string);
+                assert_eq!(case.source, string);
             }
         }
     }
 
     /// Tests that [transformations][Transform] work correctly.
-    ///
-    /// Since [`inout`] verifies that parsing and printing work correctly, we can safely use `to_`/`from_str` to test
-    /// other parts.
     mod transforms {
+        use indoc::indoc;
+        use pretty_assertions::assert_eq;
+
         use super::*;
 
-        // [TODO] More tests!
+        /// A test case for testing transformations.
+        ///
+        /// Since [`inout`] verifies that parsing and printing work correctly, we can safely use `from_str` and
+        /// `to_string` to verify that transformations are applied work correctly.
+        struct TestCase {
+            /// A string describing the input shape.
+            input: &'static str,
+            /// An array of strings describing the result of each of the transformations
+            results: [&'static str; Transform::VARIANTS.len()],
+        }
+
+        const CASES: &[TestCase] = &[
+            // Asymmetrical square input:
+            TestCase {
+                input: indoc! {"
+                    #.#
+                    #..
+                    #..
+                "},
+                results: [
+                    // Identity
+                    indoc! {"
+                        #.#
+                        #..
+                        #..
+                    "},
+                    // RotateCW
+                    indoc! {"
+                        ###
+                        ...
+                        ..#
+                    "},
+                    // Rotate180
+                    indoc! {"
+                        ..#
+                        ..#
+                        #.#
+                    "},
+                    // RotateCCW
+                    indoc! {"
+                        #..
+                        ...
+                        ###
+                    "},
+                    // ReflectV
+                    indoc! {"
+                        #.#
+                        ..#
+                        ..#
+                    "},
+                    // ReflectH
+                    indoc! {"
+                        #..
+                        #..
+                        #.#
+                    "},
+                    // ReflectNE
+                    indoc! {"
+                        ..#
+                        ...
+                        ###
+                    "},
+                    // ReflectSE
+                    indoc! {"
+                        ###
+                        ...
+                        #..
+                    "},
+                ],
+            },
+            // Annoyingly complicated rectangular example:
+            TestCase {
+                input: indoc! {"
+                    #..#..###.
+                    ####...#..
+                    ...#######
+                "},
+                results: [
+                    // Identity
+                    indoc! {"
+                        #..#..###.
+                        ####...#..
+                        ...#######
+                    "},
+                    // RotateCW
+                    indoc! {"
+                        .##
+                        .#.
+                        .#.
+                        ###
+                        #..
+                        #..
+                        #.#
+                        ###
+                        #.#
+                        #..
+                    "},
+                    // Rotate180
+                    indoc! {"
+                        #######...
+                        ..#...####
+                        .###..#..#
+                    "},
+                    // RotateCCW
+                    indoc! {"
+                        ..#
+                        #.#
+                        ###
+                        #.#
+                        ..#
+                        ..#
+                        ###
+                        .#.
+                        .#.
+                        ##.
+                    "},
+                    // ReflectV
+                    indoc! {"
+                        .###..#..#
+                        ..#...####
+                        #######...
+                    "},
+                    // ReflectH
+                    indoc! {"
+                        ...#######
+                        ####...#..
+                        #..#..###.
+                    "},
+                    // ReflectNE
+                    indoc! {"
+                        #..
+                        #.#
+                        ###
+                        #.#
+                        #..
+                        #..
+                        ###
+                        .#.
+                        .#.
+                        .##
+                    "},
+                    // ReflectSE
+                    indoc! {"
+                        ##.
+                        .#.
+                        .#.
+                        ###
+                        ..#
+                        ..#
+                        #.#
+                        ###
+                        #.#
+                        ..#
+                    "},
+                ],
+            },
+            // Something with even width/height (no "middle" element to reflect/rotate around):
+            TestCase {
+                input: indoc! {"
+                    ####
+                    #.#.
+                    #...
+                    ####
+                "},
+                results: [
+                    // Identity
+                    indoc! {"
+                        ####
+                        #.#.
+                        #...
+                        ####
+                    "},
+                    // RotateCW
+                    indoc! {"
+                        ####
+                        #..#
+                        #.##
+                        #..#
+                    "},
+                    // Rotate180
+                    indoc! {"
+                        ####
+                        ...#
+                        .#.#
+                        ####
+                    "},
+                    // RotateCCW
+                    indoc! {"
+                        #..#
+                        ##.#
+                        #..#
+                        ####
+                    "},
+                    // ReflectV
+                    indoc! {"
+                        ####
+                        .#.#
+                        ...#
+                        ####
+                    "},
+                    // ReflectH
+                    indoc! {"
+                        ####
+                        #...
+                        #.#.
+                        ####
+                    "},
+                    // ReflectNE
+                    indoc! {"
+                        #..#
+                        #.##
+                        #..#
+                        ####
+                    "},
+                    // ReflectSE
+                    indoc! {"
+                        ####
+                        #..#
+                        ##.#
+                        #..#
+                    "},
+                ],
+            },
+        ];
+
+        /// Tests that a single application of a transformation results in the correct result.
+        #[test]
+        fn singles() {
+            for case in CASES {
+                let shape = PresentShape::from_str(case.input).expect("test input should parse correctly");
+                for transform in Transform::VARIANTS {
+                    let expected_str = case.results[transform as usize];
+                    let expected_str = expected_str.trim_ascii_end(); // Strip extra newline from indoc
+                    let expected = PresentShape::from_str(expected_str).unwrap();
+
+                    let result = shape.with_transform(transform);
+                    let result_str = result.to_string();
+
+                    // Test both that the strings are equal:
+                    assert_eq!(result_str, expected_str, "string appearances don't match after {transform:?}");
+
+                    // But also that their properties are all the same:
+                    assert_eq!(result.width(), expected.width(), "widths don't match after {transform:?}");
+                    assert_eq!(result.height(), expected.height(), "heights don't match after {transform:?}");
+                    assert_eq!(result.points(), expected.points(), "points lists don't match after {transform:?}");
+                    assert_eq!(result, expected, "PartialEq doesn't match after {transform:?}");
+                }
+            }
+        }
+
+        /// Tests that multiple applications of transformations work out to be equivalent when applied in the right
+        /// order.
+        #[test]
+        fn cayley() {
+            /// Cayley table which denotes which transformations are equivalent to another.
+            const CAYLEY_TABLE: [[Transform; Transform::VARIANTS.len()]; Transform::VARIANTS.len()] = const {
+                use Transform::{Identity, ReflectH, ReflectNE, ReflectSE, ReflectV, Rotate180, RotateCCW, RotateCW};
+
+                let id = Identity;
+                let (r1, r2, r3) = (RotateCW, Rotate180, RotateCCW);
+                let (fv, fh, fd, fc) = (ReflectV, ReflectH, ReflectNE, ReflectSE);
+
+                // Copied from the table here:
+                // https://en.wikipedia.org/w/index.php?title=Dihedral_group_of_order_8&oldid=1337591287#Normal_subgroups
+                //
+                // Note that using this table verbatim requires that our enum variants are in the same order as the
+                // rows/columns.
+                [
+                    /* Identity  */ [id, r1, r2, r3, fv, fh, fd, fc],
+                    /* RotateCW  */ [r1, r2, r3, id, fc, fd, fv, fh],
+                    /* Rotate180 */ [r2, r3, id, r1, fh, fv, fc, fd],
+                    /* RotateCCW */ [r3, id, r1, r2, fd, fc, fh, fv],
+                    /* ReflectV  */ [fv, fd, fh, fc, id, r2, r1, r3],
+                    /* ReflectH  */ [fh, fc, fv, fd, r2, id, r3, r1],
+                    /* ReflectNE */ [fd, fh, fc, fv, r3, r1, id, r2],
+                    /* ReflectSE */ [fc, fv, fd, fh, r1, r3, r2, id],
+                ]
+            };
+
+            for case in CASES {
+                let shape = PresentShape::from_str(case.input).expect("test input should parse correctly");
+                for ta in Transform::VARIANTS {
+                    for tb in Transform::VARIANTS {
+                        let row = ta as usize;
+                        let col = tb as usize;
+
+                        // Transform A followed by B...
+                        let mut shape = shape.clone();
+                        shape.transform(ta);
+                        shape.transform(tb);
+
+                        // should be the same as the following transform;
+                        let expected_ident = CAYLEY_TABLE[row][col];
+                        let expected_shape = shape.with_transform(expected_ident);
+                        assert_eq!(
+                            shape,
+                            expected_shape,
+                            "{ta:?} + {tb:?} = {expected_ident:?} (Cayley row,col = {i},{j})",
+                            i = row + 1,
+                            j = col + 1,
+                        );
+                    }
+                }
+            }
+        }
     }
 }
