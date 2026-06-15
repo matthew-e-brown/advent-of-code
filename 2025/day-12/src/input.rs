@@ -416,118 +416,18 @@ impl Debug for PresentShape {
 mod tests {
     use super::*;
 
+    mod cases;
+
     /// Tests that shapes can be read to/from string format accurately and losslessly.
-    mod inout {
-        use indoc::indoc;
+    mod in_out {
         use pretty_assertions::assert_eq;
 
         use super::*;
 
-        /// A test case for parsing/printing.
-        struct TestCase {
-            source: &'static str,
-            expected_width: usize,
-            expected_height: usize,
-            expected_points: &'static [Point],
-        }
-
-        #[rustfmt::skip]
-        const CASES: &[TestCase] = &[
-            // Shapes from the day 12 example problem.
-            //
-            // ```txt
-            // 0:     1:     2:     3:     4:     5:
-            // ###    ###    .##    ##.    ###    ###
-            // ##.    ##.    ###    ###    #..    .#.
-            // ##.    .##    ##.    ##.    ###    ###
-            // ```
-            TestCase {
-                source: "###\n##.\n##.",
-                expected_width: 3,
-                expected_height: 3,
-                expected_points: &[
-                        (0,0), (1,0), (2,0),
-                        (0,1), (1,1),
-                        (0,2), (1,2),
-                ],
-            },
-            TestCase {
-                source: "###\n##.\n.##",
-                expected_width: 3,
-                expected_height: 3,
-                expected_points: &[
-                    (0,0), (1,0), (2,0),
-                    (0,1), (1,1),
-                           (1,2), (2,2),
-                ],
-            },
-            TestCase {
-                source: ".##\n###\n##.",
-                expected_width: 3,
-                expected_height: 3,
-                expected_points: &[
-                           (1,0), (2,0),
-                    (0,1), (1,1), (2,1),
-                    (0,2), (1,2),
-                ],
-            },
-            TestCase {
-                source: "##.\n###\n##.",
-                expected_width: 3,
-                expected_height: 3,
-                expected_points: &[
-                    (0,0), (1,0),
-                    (0,1), (1,1), (2,1),
-                    (0,2), (1,2),
-                ],
-            },
-            TestCase {
-                source: "###\n#..\n###",
-                expected_width: 3,
-                expected_height: 3,
-                expected_points: &[
-                    (0,0), (1,0), (2,0),
-                    (0,1),
-                    (0,2), (1,2), (2,2),
-                ],
-            },
-            TestCase {
-                source: "###\n.#.\n###",
-                expected_width: 3,
-                expected_height: 3,
-                expected_points: &[
-                    (0,0), (1,0), (2,0),
-                           (1,1),
-                    (0,2), (1,2), (2,2),
-                ],
-            },
-            // Additional hand-written test cases for rectangular inputs:
-            TestCase {
-                source: indoc! {r"
-                    #.....
-                    ......
-                    .....#
-                "}.trim_ascii_end(), // remove trailing newline from quote placement inside `indoc`
-                expected_width: 6,
-                expected_height: 3,
-                expected_points: &[(0,0), (5,2)],
-            },
-            TestCase {
-                source: indoc! {"
-                    #
-                    .
-                    #
-                "}.trim_ascii_end(),
-                expected_width: 1,
-                expected_height: 3,
-                expected_points: &[(0,0), (0,2)],
-            },
-        ];
-
         /// Tests that all test cases parse to the expected width, height, and set of points.
         #[test]
         fn parse() {
-            for case in CASES {
+            for case in cases::IN_OUT {
                 let shape = PresentShape::from_str(case.source).expect("test input should parse correctly");
                 assert_eq!(case.expected_width, shape.width(), "shape width parsed incorrectly");
                 assert_eq!(case.expected_height, shape.height(), "shape height parsed incorrectly");
@@ -538,7 +438,7 @@ mod tests {
         /// Tests that all parsed shapes print to match their input representation.
         #[test]
         fn print() {
-            for case in CASES {
+            for case in cases::IN_OUT {
                 let shape = PresentShape::from_str(case.source).expect("test input should parse correctly");
                 let string = shape.to_string();
                 assert_eq!(case.source, string);
@@ -548,240 +448,14 @@ mod tests {
 
     /// Tests that [transformations][Transform] work correctly.
     mod transforms {
-        use indoc::indoc;
-        use pretty_assertions::assert_eq;
+        // use pretty_assertions::assert_eq;
 
         use super::*;
-
-        /// A test case for testing transformations.
-        ///
-        /// Since [`inout`] verifies that parsing and printing work correctly, we can safely use `from_str` and
-        /// `to_string` to verify that transformations are applied work correctly.
-        struct TestCase {
-            /// A string describing the input shape.
-            input: &'static str,
-            /// An array of strings describing the result of each of the transformations
-            results: [&'static str; Transform::VARIANTS.len()],
-        }
-
-        const CASES: &[TestCase] = &[
-            // Asymmetrical square input:
-            TestCase {
-                input: indoc! {"
-                    #.#
-                    #..
-                    #..
-                "},
-                results: [
-                    // Identity
-                    indoc! {"
-                        #.#
-                        #..
-                        #..
-                    "},
-                    // RotateCW
-                    indoc! {"
-                        ###
-                        ...
-                        ..#
-                    "},
-                    // Rotate180
-                    indoc! {"
-                        ..#
-                        ..#
-                        #.#
-                    "},
-                    // RotateCCW
-                    indoc! {"
-                        #..
-                        ...
-                        ###
-                    "},
-                    // ReflectV
-                    indoc! {"
-                        #.#
-                        ..#
-                        ..#
-                    "},
-                    // ReflectH
-                    indoc! {"
-                        #..
-                        #..
-                        #.#
-                    "},
-                    // ReflectNE
-                    indoc! {"
-                        ..#
-                        ...
-                        ###
-                    "},
-                    // ReflectSE
-                    indoc! {"
-                        ###
-                        ...
-                        #..
-                    "},
-                ],
-            },
-            // Annoyingly complicated rectangular example:
-            TestCase {
-                input: indoc! {"
-                    #..#..###.
-                    ####...#..
-                    ...#######
-                "},
-                results: [
-                    // Identity
-                    indoc! {"
-                        #..#..###.
-                        ####...#..
-                        ...#######
-                    "},
-                    // RotateCW
-                    indoc! {"
-                        .##
-                        .#.
-                        .#.
-                        ###
-                        #..
-                        #..
-                        #.#
-                        ###
-                        #.#
-                        #..
-                    "},
-                    // Rotate180
-                    indoc! {"
-                        #######...
-                        ..#...####
-                        .###..#..#
-                    "},
-                    // RotateCCW
-                    indoc! {"
-                        ..#
-                        #.#
-                        ###
-                        #.#
-                        ..#
-                        ..#
-                        ###
-                        .#.
-                        .#.
-                        ##.
-                    "},
-                    // ReflectV
-                    indoc! {"
-                        .###..#..#
-                        ..#...####
-                        #######...
-                    "},
-                    // ReflectH
-                    indoc! {"
-                        ...#######
-                        ####...#..
-                        #..#..###.
-                    "},
-                    // ReflectNE
-                    indoc! {"
-                        #..
-                        #.#
-                        ###
-                        #.#
-                        #..
-                        #..
-                        ###
-                        .#.
-                        .#.
-                        .##
-                    "},
-                    // ReflectSE
-                    indoc! {"
-                        ##.
-                        .#.
-                        .#.
-                        ###
-                        ..#
-                        ..#
-                        #.#
-                        ###
-                        #.#
-                        ..#
-                    "},
-                ],
-            },
-            // Something with even width/height (no "middle" element to reflect/rotate around):
-            TestCase {
-                input: indoc! {"
-                    ####
-                    #.#.
-                    #...
-                    ####
-                "},
-                results: [
-                    // Identity
-                    indoc! {"
-                        ####
-                        #.#.
-                        #...
-                        ####
-                    "},
-                    // RotateCW
-                    indoc! {"
-                        ####
-                        #..#
-                        #.##
-                        #..#
-                    "},
-                    // Rotate180
-                    indoc! {"
-                        ####
-                        ...#
-                        .#.#
-                        ####
-                    "},
-                    // RotateCCW
-                    indoc! {"
-                        #..#
-                        ##.#
-                        #..#
-                        ####
-                    "},
-                    // ReflectV
-                    indoc! {"
-                        ####
-                        .#.#
-                        ...#
-                        ####
-                    "},
-                    // ReflectH
-                    indoc! {"
-                        ####
-                        #...
-                        #.#.
-                        ####
-                    "},
-                    // ReflectNE
-                    indoc! {"
-                        #..#
-                        #.##
-                        #..#
-                        ####
-                    "},
-                    // ReflectSE
-                    indoc! {"
-                        ####
-                        #..#
-                        ##.#
-                        #..#
-                    "},
-                ],
-            },
-        ];
 
         /// Tests that a single application of a transformation results in the correct result.
         #[test]
         fn singles() {
-            for case in CASES {
+            for case in cases::TRANSFORMS {
                 let shape = PresentShape::from_str(case.input).expect("test input should parse correctly");
                 for transform in Transform::VARIANTS {
                     let expected_str = case.results[transform as usize];
@@ -832,7 +506,7 @@ mod tests {
                 ]
             };
 
-            for case in CASES {
+            for case in cases::TRANSFORMS {
                 let shape = PresentShape::from_str(case.input).expect("test input should parse correctly");
                 for ta in Transform::VARIANTS {
                     for tb in Transform::VARIANTS {
