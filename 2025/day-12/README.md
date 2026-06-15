@@ -11,15 +11,8 @@
     - [Reflections](#reflections)
     - [Conclusion](#conclusion)
 
-<style>
-.scroll {
-  overflow-x: auto;
-}
-
-pre.scroll {
-  white-space: pre !important;
-}
-</style>
+<!-- cspell:ignore bmatrix mathcal mathtt mathit mathbb -->
+<!-- cspell:words Boowomp -->
 
 ## Overall plan
 
@@ -83,7 +76,7 @@ The problem given above is represented by the following matrix $A$:
 |  $E$  |       |  $1$  |  $1$  |       |       |  $1$  |  $1$  |
 |  $F$  |       |  $1$  |       |       |       |       |  $1$  |
 
-(the non-$1$ cells could also be represented as zeroes, instead of as empty
+(the non-$`1`$ cells could also be represented as zeroes, instead of as empty
 cells).
 
 From here, the core of the algorithm is how the rows and the columns represent
@@ -150,7 +143,7 @@ the goal is to **completely fill** a board by using each of the 12 pentominoes
   exactly once. All rows would have a $1$ in exactly one of these 12 columns.
 
 Obviously, this results in **a lot** of rows. The 5&times;1 pentomino (called
-"$I$") can be placed in 6 different places in each row when laid down
+"$`I`$") can be placed in 6 different places in each row when laid down
 horizontally, and in two different places per column when standing upright (for
 a 6-tall, 10-wide board). That means that the $I$ pentomino alone would have
 $6\times5 + 2\times10 = 50$ rows in our matrix. Each different pentomino would
@@ -182,7 +175,7 @@ Here, I worked out, by hand, all the rotations of a 3&times;3 square, including
 after reflections. Each orientation is given a number. It appears that, yes,
 there are indeed only eight!
 
-<pre id="transform-table" class="scroll" style="max-width: max-content;">
+<pre style="white-space: pre; overflow-x: auto; max-width: max-content;">
            +-----------------------------------------------+
            |                   Reflection                  |
 +----------+-----------+-----------+-----------+-----------+
@@ -210,14 +203,14 @@ there are indeed only eight!
 +----------+-----------+-----------+-----------+-----------+
 </pre>
 
-> [!TIP] Note
+> [!NOTE]
 >
 > With some smarter googling, I eventually found the proper name for this. These
-> orientations are the _[dihedral group of order 8][dihedral-matrices],_ which is
-> the symmetry group for a square. This is even though our pieces may be
+> orientations are the _[dihedral group of order 8][dihedral-matrices],_ which
+> is the symmetry group for a square. This is even though our pieces may be
 > rectangular, and we don't necessarily care about the number of ways those
-> rectangles may be symmetrical; the "square" being transformed is the coordinate
-> space that the pieces sit inside of.
+> rectangles may be symmetrical; the "square" being transformed is the
+> coordinate space that the pieces sit inside of.
 >
 > [dihedral-matrices]: https://en.wikipedia.org/w/index.php?title=Dihedral_group&oldid=1347455413#Matrix_representation
 
@@ -228,9 +221,9 @@ represented as a list of $(x,y)$ tile positions. Assuming we treat them as
 column vectors, a 90-degree (counterclockwise) rotation in two dimensions would
 look like:
 
-$$
-R = \begin{bmatrix} 0 & -1 \\ 1 & 0 \end{bmatrix}.
-$$
+```math
+R = \begin{bmatrix} 0 & {-1} \\ 1 & 0 \end{bmatrix}.
+```
 
 We need to be careful, though. This $R$ assumes that the shape is centered at
 the origin, but our pieces' positions are relative to the top-left corner, which
@@ -253,7 +246,7 @@ the Cartesian plane onto its side in the top-left plane. To get the piece back
 into the top-right plane, we need to shift it to the right by its height (which
 has now become its width), minus one.
 
-<pre class="scroll">
+<pre style="white-space: pre; overflow-x: auto;">
 Piece with w = 3, h = 3.
       ^                     ^                     ^      
       |                     |                     |      
@@ -270,63 +263,61 @@ To apply translations like this, we'll need to use homogeneous coordinates. The
 final matrix to rotate one of _our_ pieces, with a height of $\mathtt{h}$,
 clockwise by 90&deg;, is:
 
-<div class="scroll">
+<div style="overflow-x: auto;">
 
-$$
+```math
 \begin{aligned}
   r_1
     &=
       \begin{bmatrix}
-        1 & 0 & \mathtt{h} - 1 \\
+        1 & 0 & {\mathtt{h} - 1} \\
         0 & 1 & 0 \\
-        0 & 0 & 1 \\
+        0 & 0 & 1
       \end{bmatrix}
       \begin{bmatrix}
-        0 & -1 & 0 \\
-        1 &  0 & 0 \\
-        0 &  0 & 1 \\
+        0 & {-1} & 0 \\
+        1 &    0 & 0 \\
+        0 &    0 & 1
       \end{bmatrix}
     \\[2em]
     &=
       \begin{bmatrix}
-        0 & -1 & \mathtt{h} - 1 \\
-        1 & 0 & 0 \\
-        0 & 0 & 1 \\
+        0 & {-1} & {\mathtt{h} - 1} \\
+        1 &    0 & 0 \\
+        0 &    0 & 1
       \end{bmatrix}.
 \end{aligned}
-$$
+```
 
 </div>
 
 Applying this to an $(x, y)$ column vector gives us
 
-<div class="scroll">
+<div style="overflow-x: auto;">
 
-$$
+```math
 \begin{aligned}
   &
     \begin{bmatrix}
-      0 & -1 & \mathtt{h} - 1 \\
-      1 & 0 & 0 \\
-      0 & 0 & 1 \\
+      0 & {-1} & {\mathtt{h} - 1} \\
+      1 &    0 & 0 \\
+      0 &    0 & 1
     \end{bmatrix}
     \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}
   \\[2em]
   =&
-    \begin{bmatrix}
-      \mathtt{h} - y - 1 \\ x \\ 1
-    \end{bmatrix}.
+    \begin{bmatrix} {\mathtt{h} - y - 1} \\ x \\ 1 \end{bmatrix}.
 \end{aligned}
-$$
+```
 
 </div>
 
-This is a nice and simple expression that we can apply to our list of $(x,\,y)$
+This is a nice and simple expression that we can apply to our list of $(x, y)$
 points:
 
-$$
-R_1(x,\,y) = \left(\mathtt{h} - y - 1,\; x\right).
-$$
+```math
+R_1(x,\,y) = ({\mathtt{h} - y - 1},\;x).
+```
 
 This is the formula we'll want to apply to each of the points in our list in
 order to rotate it.
@@ -340,10 +331,8 @@ implementation? We're supporting rectangular pieces in our implementation.),
 then we'll need to ensure that the second rotation in the sequence shifts
 backwards by the original piece's _width_ instead.
 
-<pre class="scroll">
+<pre style="white-space: pre; overflow-x: auto;">
 Piece with w = 4, h = 2:
-
- (scroll →)
 
        ^                       ^                       ^                       ^                       ^       
        |                       |         h-1           |                       |         w-1           |       
@@ -361,32 +350,32 @@ translate by width (minus one). But a more elegant way to do it would probably
 be to simply rotate by 90 twice, then shift right _and_ up by the shape's width
 and height at the same time.
 
-<div class="scroll">
+<div style="overflow-x: auto;">
 
-$$
+```math
 \begin{aligned}
   &&
     r_2
     &=
       \begin{bmatrix}
-        1 & 0 & \mathtt{w} - 1 \\
-        0 & 1 & \mathtt{h} - 1 \\
-        0 & 0 & 1 \\
+        1 & 0 & {\mathtt{w} - 1} \\
+        0 & 1 & {\mathtt{h} - 1} \\
+        0 & 0 & 1
       \end{bmatrix}
       \left(
         \begin{bmatrix}
-          0 & -1 & 0 \\
-          1 &  0 & 0 \\
-          0 &  0 & 1 \\
+          0 & {-1} & 0 \\
+          1 &    0 & 0 \\
+          0 &    0 & 1
         \end{bmatrix}
       \right)^2
   \\[2em]
   &&
     &=
       \begin{bmatrix}
-        -1 &  0 & \mathtt{w} - 1 \\
-         0 & -1 & \mathtt{h} - 1 \\
-         0 &  0 & 1 \\
+        {-1} &    0 & {\mathtt{w} - 1} \\
+           0 & {-1} & {\mathtt{h} - 1} \\
+           0 &    0 & 1
       \end{bmatrix};
   \\[2em]
   \Longrightarrow
@@ -394,47 +383,50 @@ $$
     r_2 \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}
     &=
       \begin{bmatrix}
-        -1 &  0 & \mathtt{w} - 1 \\
-         0 & -1 & \mathtt{h} - 1 \\
-         0 &  0 & 1 \\
+        {-1} &    0 & {\mathtt{w} - 1} \\
+           0 & {-1} & {\mathtt{h} - 1} \\
+           0 &    0 & 1
       \end{bmatrix}
       \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}
   \\[2em]
   &&
     &=
       \begin{bmatrix}
-        \mathtt{w} - x - 1 \\
-        \mathtt{h} - y - 1 \\
-        1 \\
+        {\mathtt{w} - x - 1} \\
+        {\mathtt{h} - y - 1} \\
+        1
       \end{bmatrix}.
 \end{aligned}
-$$
+```
 
 </div>
 
 This gives us the following formula to apply to our $(x, y)$ points:
 
-$$
-R_2(x,\,y) = \left(\mathtt{w} - x - 1,\;\mathtt{h} - y - 1\right).
-$$
+```math
+R_2(x,\,y) = ({\mathtt{w} - x - 1},\;{\mathtt{h} - y - 1}).
+```
 
 Determining $R_3$ is done in much the same fashion; compose the original $R$
 with itself twice (for a total of three instances), which puts our shape
 sideways in the bottom-right quadrant, and then shift it upwards by its width.
 This gives us the following matrix and formula:
 
-$$
-r_3
-  =
-    \begin{bmatrix}
+<!--
+  NB: MathJax (the LaTeX renderer that GitHub uses) doesn't appear to support
+  using '\\' *at all* outside of alignment environments. At least, not on GitHub.
+-->
+```math
+\begin{aligned}
+r_3 = \begin{bmatrix}
        0 & 1 & 0 \\
-      -1 & 0 & \mathtt{w} -1 \\
+    {-1} & 0 & {\mathtt{w} -1} \\
        0 & 0 & 1
-    \end{bmatrix},
+  \end{bmatrix},
   \\[1em]
-R_3(x,\,y)
-  = \left(y,\; \mathtt{w} - x - 1\right).
-$$
+R_3(x,\,y) = (y,\;{\mathtt{w} - x - 1}).
+\end{aligned}
+```
 
 #### Reflections
 
@@ -453,74 +445,66 @@ shape's width (minus one).
 >
 > We are following the naming scheme given by [the Wikipedia article on the
 > dihedral group][dihedral-matrices], even though we are introducing the extra
-> shifting factors of $\mathtt{w} - 1$ and $\mathtt{h} - 1$.
+> shifting factors of ${\mathtt{w} - 1}$ and ${\mathtt{h} - 1}$.
 
-$$
+```math
 \begin{aligned}
   s_0
   &=
     \begin{bmatrix}
-      1 & 0 & \mathtt{w} - 1 \\
+      1 & 0 & {\mathtt{w} - 1} \\
       0 & 1 & 0 \\
-      0 & 0 & 1 \\
+      0 & 0 & 1
     \end{bmatrix}
     \begin{bmatrix}
-      -1 & 0 & 0 \\
-       0 & 1 & 0 \\
-       0 & 0 & 1 \\
+      {-1} & 0 & 0 \\
+         0 & 1 & 0 \\
+         0 & 0 & 1
     \end{bmatrix}
   \\[2em]
   &=
     \begin{bmatrix}
-      -1 & 0 & \mathtt{w} - 1 \\
-       0 & 1 & 0 \\
-       0 & 0 & 1 \\
+      {-1} & 0 & {\mathtt{w} - 1} \\
+         0 & 1 & 0 \\
+         0 & 0 & 1
     \end{bmatrix}.
 \end{aligned}
-$$
+```
 
 Of course, this gives us the first of the four new formulae:
 
-$$
-S_0(x,\,y) = \left(\mathtt{w} - x - 1,\; y\right).
-$$
+```math
+S_0(x,\,y) = ({\mathtt{w} - x - 1},\;y).
+```
 
 Then, composing each of our $r_1$, $r_2$, and $r_3$ matrices on the left-hand
 side of $s_0$ should give us the remaining three.
 
-<div class="scroll">
+<div style="overflow-x: auto;">
 
-$$
+```math
 \begin{aligned}
   s_1 = r_1 s_0
   &=
     \begin{bmatrix}
-       0 & -1 & \mathtt{h} - 1 \\
-      -1 &  0 & \mathtt{w} - 1 \\
-       0 &  0 & 1 \\
+         0 & {-1} & {\mathtt{h} - 1} \\
+      {-1} &    0 & {\mathtt{w} - 1} \\
+         0 &    0 & 1
     \end{bmatrix}
-    \thickspace
-  &&\Longrightarrow&
-    \thickspace
-  S_1(x,\,y)
-  &=
-    \left(\mathtt{h} - y - 1,\; \mathtt{w} - x - 1\right),
+  \quad &&\Longrightarrow& \quad
+    S_1(x,\,y) &= ({\mathtt{h} - y - 1},\;{\mathtt{w} - x - 1}),
 
   \\[3em]
 
   s_2 = r_2 s_0
   &=
     \begin{bmatrix}
-      1 &  0 & 0 \\
-      0 & -1 & \mathtt{h} - 1 \\
-      0 &  0 & 1 \\
+      1 &    0 & 0 \\
+      0 & {-1} & {\mathtt{h} - 1} \\
+      0 &    0 & 1
     \end{bmatrix}
-    \thickspace
-  &&\Longrightarrow&
-    \thickspace
-  S_2(x,\,y)
-  &=
-    \left(x,\; \mathtt{h} - y - 1\right),
+  \quad &&\Longrightarrow& \quad
+    S_2(x,\,y) &= (x,\;{\mathtt{h} - y - 1}),
 
   \\[3em]
 
@@ -529,16 +513,12 @@ $$
     \begin{bmatrix}
       0 & 1 & 0 \\
       1 & 0 & 0 \\
-      0 & 0 & 1 \\
+      0 & 0 & 1
     \end{bmatrix}
-    \thickspace
-  &&\Longrightarrow&
-    \thickspace
-  S_3(x,\,y)
-  &=
-    \left(y,\; x\right).
+  \quad &&\Longrightarrow& \quad
+    S_3(x,\,y) &= (y,\; x).
 \end{aligned}
-$$
+```
 
 </div>
 
@@ -547,18 +527,18 @@ $$
 Finally, the transformations to go directly from the initial position into the
 transformed positions are:
 
-$$
+```math
 \begin{aligned}
   R_0(x,\,y) &= (x,\;y), \\
-  R_1(x,\,y) &= (\mathtt{h}-y-1,\;x), \\
-  R_2(x,\,y) &= (\mathtt{w}-x-1,\;\mathtt{h}-y-1), \\
-  R_3(x,\,y) &= (y,\;\mathtt{w}-x-1), \\[1ex]
-  S_0(x,\,y) &= (\mathtt{w}-x-1,\;y), \\
-  S_1(x,\,y) &= (\mathtt{h}-y-1,\;\mathtt{w}-x-1), \\
-  S_2(x,\,y) &= (x,\;\mathtt{h}-y-1), \\
+  R_1(x,\,y) &= ({\mathtt{h}-y-1},\;x), \\
+  R_2(x,\,y) &= ({\mathtt{w}-x-1},\;{\mathtt{h}-y-1}), \\
+  R_3(x,\,y) &= (y,\;{\mathtt{w}-x-1}), \\[1ex]
+  S_0(x,\,y) &= ({\mathtt{w}-x-1},\;y), \\
+  S_1(x,\,y) &= ({\mathtt{h}-y-1},\;{\mathtt{w}-x-1}), \\
+  S_2(x,\,y) &= (x,\;{\mathtt{h}-y-1}), \\
   S_3(x,\,y) &= (y,\;x).
 \end{aligned}
-$$
+```
 
 1.  $R_0$ is the identity transformation.
 2.  $R_1$ is a 90-degree rotation.
