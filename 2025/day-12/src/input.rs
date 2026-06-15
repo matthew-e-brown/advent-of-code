@@ -514,15 +514,15 @@ mod tests {
                         let col = tb as usize;
 
                         // Transform A followed by B...
-                        let mut shape = shape.clone();
-                        shape.transform(ta);
-                        shape.transform(tb);
+                        let mut transformed = shape.clone();
+                        transformed.transform(ta);
+                        transformed.transform(tb);
 
                         // should be the same as the following transform;
                         let expected_ident = CAYLEY_TABLE[row][col];
                         let expected_shape = shape.with_transform(expected_ident);
                         assert_eq!(
-                            shape,
+                            transformed,
                             expected_shape,
                             "{ta:?} + {tb:?} = {expected_ident:?} (Cayley row,col = {i},{j})",
                             i = row + 1,
