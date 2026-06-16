@@ -448,7 +448,7 @@ mod tests {
 
     /// Tests that [transformations][Transform] work correctly.
     mod transforms {
-        // use pretty_assertions::assert_eq;
+        use pretty_assertions::assert_eq;
 
         use super::*;
 

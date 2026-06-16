@@ -3,9 +3,15 @@ pub use transforms::CASES as TRANSFORMS;
 
 use super::*;
 
-mod in_out {
-    use indoc::indoc;
+// Ending an `indoc` with a newline causes that trailing newline to be included in the string. We don't want that. This
+// macro forwards all tokens to `indoc`, but then trims off the end (which is thankfully const-compatible).
+macro_rules! indoc {
+    ($tt:tt) => {
+        ::indoc::indoc! {$tt}.trim_ascii_end()
+    };
+}
 
+mod in_out {
     use super::*;
 
     /// A test case for parsing/printing.
@@ -19,15 +25,12 @@ mod in_out {
     #[rustfmt::skip]
     pub const CASES: &[TestCase] = &[
         // Shapes from the day 12 example problem.
-        //
-        // ```txt
-        // 0:     1:     2:     3:     4:     5:
-        // ###    ###    .##    ##.    ###    ###
-        // ##.    ##.    ###    ###    #..    .#.
-        // ##.    .##    ##.    ##.    ###    ###
-        // ```
         TestCase {
-            source: "###\n##.\n##.",
+            source: indoc! {"
+                ###
+                ##.
+                ##.
+            "},
             expected_width: 3,
             expected_height: 3,
             expected_points: &[
@@ -37,7 +40,11 @@ mod in_out {
             ],
         },
         TestCase {
-            source: "###\n##.\n.##",
+            source: indoc! {"
+                ###
+                ##.
+                .##
+            "},
             expected_width: 3,
             expected_height: 3,
             expected_points: &[
@@ -47,7 +54,11 @@ mod in_out {
             ],
         },
         TestCase {
-            source: ".##\n###\n##.",
+            source: indoc! {"
+                .##
+                ###
+                ##.
+            "},
             expected_width: 3,
             expected_height: 3,
             expected_points: &[
@@ -57,7 +68,11 @@ mod in_out {
             ],
         },
         TestCase {
-            source: "##.\n###\n##.",
+            source: indoc! {"
+                ##.
+                ###
+                ##.
+            "},
             expected_width: 3,
             expected_height: 3,
             expected_points: &[
@@ -67,7 +82,11 @@ mod in_out {
             ],
         },
         TestCase {
-            source: "###\n#..\n###",
+            source: indoc! {"
+                ###
+                #..
+                ###
+            "},
             expected_width: 3,
             expected_height: 3,
             expected_points: &[
@@ -77,7 +96,11 @@ mod in_out {
             ],
         },
         TestCase {
-            source: "###\n.#.\n###",
+            source: indoc! {"
+                ###
+                .#.
+                ###
+            "},
             expected_width: 3,
             expected_height: 3,
             expected_points: &[
@@ -92,7 +115,7 @@ mod in_out {
                 #.....
                 ......
                 .....#
-            "}.trim_ascii_end(), // remove trailing newline from quote placement inside `indoc`
+            "},
             expected_width: 6,
             expected_height: 3,
             expected_points: &[(0,0), (5,2)],
@@ -102,7 +125,7 @@ mod in_out {
                 #
                 .
                 #
-            "}.trim_ascii_end(),
+            "},
             expected_width: 1,
             expected_height: 3,
             expected_points: &[(0,0), (0,2)],
@@ -111,14 +134,12 @@ mod in_out {
 }
 
 mod transforms {
-    use indoc::indoc;
-
     use super::*;
 
     /// A test case for testing transformations.
     ///
-    /// Since [`inout`] verifies that parsing and printing work correctly, we can safely use `from_str` and
-    /// `to_string` to verify that transformations are applied work correctly.
+    /// Since there are other tests verifying that parsing and printing work correctly, it's safe to use `to_string` to
+    /// verify that transformations result in the correct shape.
     pub struct TestCase {
         /// A string describing the input shape.
         pub input: &'static str,
@@ -188,10 +209,10 @@ mod transforms {
         // Annoyingly complicated rectangular example:
         TestCase {
             input: indoc! {"
-                    #..#..###.
-                    ####...#..
-                    ...#######
-                "},
+                #..#..###.
+                ####...#..
+                ...#######
+            "},
             results: [
                 // Identity
                 indoc! {"
