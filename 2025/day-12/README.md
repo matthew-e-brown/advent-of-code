@@ -153,6 +153,176 @@ board.
 
 #### TODO: Continue write-up
 
+#### Code translation
+
+##### Attempt 1
+
+This is my original attempt at translating Knuth's code from his original paper
+and from his `dance.w`.
+
+```c
+const size_t h = 0;
+
+struct node {
+  size_t up;
+  size_t down;
+  size_t left;
+  size_t right;
+  size_t column;
+};
+
+struct column {
+  size_t node;
+  size_t size;
+};
+
+struct column columns[MAX_COLUMNS] = {...};
+struct node nodes[MAX_NODES] = {...};
+size_t solution[MAX_SOLUTION_SIZE] = {0};
+
+size_t num_solutions = 0;
+
+size_t chooseColumn()
+{
+  size_t min_col;
+  size_t min_size = SIZE_MAX;
+  for (size_t j = nodes[h].right; j != h; j = nodes[j].right)
+  {
+    size_t col = nodes[j].column;
+    size_t col_size = columns[col].size;
+    if (col_size < min)
+    {
+      min_col = col;
+      min_size = col_size;
+    }
+  }
+
+  return min_col;
+}
+
+void search(size_t k = 0)
+{
+  // If list of columns is empty, then this is a valid solution. Print and
+  // return.
+  if (nodes[h].right == h)
+  {
+    num_solutions += 1;
+    printSolution(k); // Print the first `k` elements of `solution`
+    return;
+  }
+
+  // Choose a column object to cover by some deterministic means. In this
+  // implementation, we find the one with the fewest nodes in it. Note that
+  // there is guaranteed to be at least one to choose from because of the check
+  // above.
+  //
+  // This also gives us a chance see if any columns have no more rows (which
+  // means this branch has no more solutions).
+  size_t col = chooseColumn();
+  if (columns[col].size == 0)
+  {
+    return;
+  }
+
+  // "Cover" the column to mark it as being chosen:
+  //
+  // - Remove node `c` from the list of column headers
+  // - Then run down the rows of this column, and:
+  //   - Remove them from all *other* columns they appear in.
+  //   - Notably, this does NOT remove the row from *this* column.
+  //
+  // This step is not backtracked. This is the deterministic part of the
+  // algorithm. After covering the column, none of this column's rows appear in
+  // any other column anymore.
+  coverColumn(col);
+
+  // Now run down the rows of this column *again*, making each row part of our 
+  // final solution. Then we recurse to see if removing this row eventually
+  // lands us at a valid solution.
+  size_t c = columns[col].node;
+  for (size_t r = nodes[c].down; r != c; r = nodes[r].down)
+  {
+    // Take note that we are attempting this row as part of the solution.
+    // Note that this `r` is just _one_ of the nodes in this row.
+    solution[k] = r;
+
+    // Go and cover all the columns this row is a part of; recall that the
+    // current column has already been covered, so we start one to the right.
+    for (size_t j = nodes[r].right; j != r; j = nodes[j].right)
+    {
+      coverColumn(nodes[j].column);
+    }
+
+    // How many solutions do we find after covering this row?
+    search(k + 1);
+
+    // That recursive call handles the entire search tree spawned from selecting
+    // this row. Now, we *uncover* all the columns we just covered.
+    for (size_t j = nodes[r].left; j != r; j = nodes[j].left)
+    {
+      uncoverColumn(nodes[j].column);
+    }
+  }
+
+  uncoverColumn(col);
+}
+
+void coverColumn(size_t col)
+{
+  size_t c = columns[col].node;
+
+  // Remove node `c` from the header list by making its L/R pointer go around it
+  size_t l = nodes[c].left;
+  size_t r = nodes[c].right;
+  nodes[r].left = l;
+  nodes[l].right = r;
+
+  // For all rows within this column...
+  for (size_t i = nodes[c].down; i != c; i = nodes[i].down)
+  {
+    // ...and for all cells within this row (EXCEPT this particular node)...
+    for (size_t j = nodes[i].right; i != j; j = nodes[j].right)
+    {
+      // Remove them from their column list. This means that those columns no
+      // longer contain this row.
+      size_t u = nodes[j].up;
+      size_t d = nodes[j].down;
+      nodes[d].up = u;
+      nodes[u].down = d;
+
+      columns[nodes[j].column].size -= 1;
+    }
+  }
+}
+
+void uncoverColumn(size_t col)
+{
+  size_t c = columns[col].node;
+
+  // For all rows within this column, going up this time...
+  for (size_t i = nodes[c].up; i != c; i = nodes[i].up)
+  {
+    // ...and for all cells within this row (EXCEPT this particular node), going
+    // left this time...
+    for (size_t j = nodes[i].left; j != i; j = nodes[j].left)
+    {
+      // Re-add them into their column list.
+      size_t u = nodes[j].up;
+      size_t d = nodes[j].down;
+      nodes[d].up = j;
+      nodes[u].down = j;
+
+      columns[nodes[j].column].size += 1;
+    }
+  }
+
+  // Now re-add the column header back into the list.
+  size_t l = nodes[c].left;
+  size_t r = nodes[c].right;
+  nodes[r].left = c;
+  nodes[l].right = c;
+}
+```
 
 <!-- ----------------------------------------------------------------------- -->
 <!-- ----------------------------------------------------------------------- -->
