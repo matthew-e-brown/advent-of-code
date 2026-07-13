@@ -1,3 +1,6 @@
+// Next [TODO]: Get the *construction* of the matrix working so that we can build a simple example in a `#[test]` and
+// see if this code works on the basic example from Wikipedia. *Then* we can worry about handling size/count.
+
 // #![allow(unused)]
 //! Custom implementation of Donald Knuth's _Algorithm X._
 //!
