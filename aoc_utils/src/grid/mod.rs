@@ -25,7 +25,7 @@ pub use self::neighbours::Neighbours;
 pub type Pos = (usize, usize);
 
 /// A 2D grid providing easy access to indexing operations.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Grid<T> {
     w: usize,
     h: usize,
