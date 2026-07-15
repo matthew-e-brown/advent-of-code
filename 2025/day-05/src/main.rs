@@ -1,6 +1,8 @@
 use std::cmp;
 use std::collections::BinaryHeap;
-use std::fmt::{Debug, Display};
+use std::range::RangeInclusive;
+
+type Range = RangeInclusive<u64>;
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -15,7 +17,7 @@ fn main() {
         width = width.max(a.len()).max(b.len());
         let a = a.parse::<u64>().expect("puzzle input should contain valid u64s");
         let b = b.parse::<u64>().expect("puzzle input should contain valid u64s");
-        Range::new(a, b)
+        Range { start: a, last: b }
     });
 
     let ranges = build_ranges(ranges);
@@ -28,7 +30,7 @@ fn main() {
         if let Some(i) = search_ranges(&ranges, fruit) {
             fresh_count += 1;
             if aoc_utils::verbosity() > 0 {
-                println!("Fruit {fruit:width$}: fits into range #{i:3} ({:width$})", &ranges[i]);
+                println!("Fruit {fruit:width$}: fits into range #{i:3} ({:width$?})", &ranges[i]);
             }
         } else {
             if aoc_utils::verbosity() > 1 {
@@ -41,48 +43,11 @@ fn main() {
     let mut total_fresh = 0usize;
     for &range in &ranges {
         // Range size is +1 because they're inclusive.
-        total_fresh += (range.end - range.start + 1) as usize;
+        total_fresh += (range.last - range.start + 1) as usize;
     }
 
     println!("Number of input fresh fruits from input (part 1): {fresh_count}");
     println!("Total number of fresh fruit across all ranges (part 2): {total_fresh}");
-}
-
-/// An inclusive range.
-///
-/// Rust's [`RangeInclusive`][std::ops::RangeInclusive] struct is a little bit awkward to work with, on account of being
-/// generic over any type. It exposes `.start()` and `.end()` methods, but has no way to mutate those values. It's meant
-/// mostly for looping through.
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Range {
-    start: u64,
-    end: u64,
-}
-
-impl Range {
-    pub fn new(start: u64, end: u64) -> Self {
-        Range { start, end }
-    }
-}
-
-impl Display for Range {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(w) = f.width() {
-            write!(f, "{:>w$}-{:<w$}", self.start, self.end)
-        } else {
-            write!(f, "{}-{}", self.start, self.end)
-        }
-    }
-}
-
-impl Debug for Range {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(w) = f.width() {
-            write!(f, "{:w$}..={:w$}", self.start, self.end)
-        } else {
-            write!(f, "{}..={}", self.start, self.end)
-        }
-    }
 }
 
 /// Merges a series of ranges into a smaller set of non-overlapping ranges.
@@ -98,7 +63,7 @@ fn build_ranges(ranges: impl Iterator<Item = Range>) -> Vec<Range> {
 
     impl Ord for SortHelper {
         fn cmp(&self, other: &Self) -> cmp::Ordering {
-            self.0.start.cmp(&other.0.start).then(self.0.end.cmp(&other.0.end)).reverse()
+            self.0.start.cmp(&other.0.start).then(self.0.last.cmp(&other.0.last)).reverse()
         }
     }
 
@@ -111,10 +76,10 @@ fn build_ranges(ranges: impl Iterator<Item = Range>) -> Vec<Range> {
     // Collect into BinaryHeap to sort, then merge in a vector:
     let mut ranges = ranges.map(SortHelper).collect::<BinaryHeap<SortHelper>>();
     let mut merged = Vec::<Range>::new();
-    while let Some(SortHelper(range)) = ranges.pop() {
+    while let Some(SortHelper(new_range)) = ranges.pop() {
         match merged.last_mut() {
-            Some(current) if range.start <= current.end => current.end = current.end.max(range.end),
-            Some(_) | None => merged.push(range),
+            Some(current) if new_range.start <= current.last => current.last = current.last.max(new_range.last),
+            Some(_) | None => merged.push(new_range),
         }
     }
 
@@ -134,7 +99,7 @@ fn search_ranges(ranges: &[Range], x: u64) -> Option<usize> {
         //   if `x` fits within range `i - 1`, then we have a hit. If it doesn't, no hit.
         // - There is no special edge-case for when `i` is `range.len()`; the same `i - 1` check works there, too.
         Err(0) => None,
-        Err(i) if x <= ranges[i - 1].end => Some(i - 1),
+        Err(i) if x <= ranges[i - 1].last => Some(i - 1),
         Err(_) => None,
     }
 }
