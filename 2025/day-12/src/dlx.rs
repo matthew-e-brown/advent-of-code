@@ -81,10 +81,10 @@ pub struct Matrix<R, C = ()> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct ColIndex(usize);
+struct ColIndex(u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct RowIndex(usize);
+struct RowIndex(u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NodeIndex(u32);
@@ -101,14 +101,22 @@ struct Node {
 
 #[derive(Debug)]
 struct RowHeader<R> {
+    /// User-provided data used to identify this row.
     name: R,
+    /// Whether or not this row is used in the solution. Used for debugging.
+    #[cfg(debug_assertions)]
+    in_solution: bool,
 }
 
 #[derive(Debug)]
 struct ColHeader<C> {
+    /// User-provided data used to identify this column.
     name: C,
-    size: usize,
+    /// The number of rows still remaining in this column.
+    choices: usize,
+    /// The remaining number of times this column must be covered before it is considered done.
     count: usize,
+    /// The index of the dummy-node at the start of this column's list of nodes.
     node: NodeIndex,
 }
 
@@ -117,11 +125,49 @@ impl NodeIndex {
 }
 
 impl ColIndex {
-    pub const NONE: ColIndex = ColIndex(usize::MAX);
+    /// The [`ColIndex`] used by the root node (`h`) to denote that it does not have a column header.
+    pub const NONE: ColIndex = ColIndex(u32::MAX);
 }
 
 impl RowIndex {
-    pub const NONE: RowIndex = RowIndex(usize::MAX);
+    /// The [`RowIndex`] used by the nodes in the header row to denote that they do not have a row header.
+    pub const NONE: RowIndex = RowIndex(u32::MAX);
+}
+
+impl<C> ColHeader<C> {
+    /// Gets the name of this column.
+    pub fn name(&self) -> &C {
+        &self.name
+    }
+}
+
+impl<R> RowHeader<R> {
+    /// Gets the name of this row.
+    pub fn name(&self) -> &R {
+        &self.name
+    }
+
+    #[cfg(debug_assertions)]
+    fn mark_chosen_assert(&mut self) {
+        match self.in_solution {
+            true => panic!("attempted to use the same row twice in the same solution"),
+            false => self.in_solution = true,
+        };
+    }
+
+    #[cfg(debug_assertions)]
+    fn mark_unchosen_assert(&mut self) {
+        match self.in_solution {
+            false => panic!("attempted to restore the same row more than once"),
+            true => self.in_solution = false,
+        }
+    }
+}
+
+enum ColumnResult {
+    Next(ColIndex),
+    SearchSuccess,
+    SearchFailure,
 }
 
 impl<R, C> Matrix<R, C> {
@@ -138,19 +184,19 @@ impl<R, C> Matrix<R, C> {
     }
 
     fn column(&self, i: ColIndex) -> &ColHeader<C> {
-        &self.col_headers[i.0]
+        &self.col_headers[i.0 as usize]
     }
 
     fn column_mut(&mut self, i: ColIndex) -> &mut ColHeader<C> {
-        &mut self.col_headers[i.0]
+        &mut self.col_headers[i.0 as usize]
     }
 
     fn row_header(&self, i: RowIndex) -> &RowHeader<R> {
-        &self.row_headers[i.0]
+        &self.row_headers[i.0 as usize]
     }
 
     fn row_header_mut(&mut self, i: RowIndex) -> &mut RowHeader<R> {
-        &mut self.row_headers[i.0]
+        &mut self.row_headers[i.0 as usize]
     }
 
     fn column_for_node(&self, i: NodeIndex) -> &ColHeader<C> {
@@ -168,52 +214,85 @@ impl<R, C> Matrix<R, C> {
     pub fn search(&mut self) -> Option<Vec<&R>> {
         let mut solution = Vec::new();
         if self.search_recursive(&mut solution) {
-            let rows = solution.into_iter().map(|r| &self.row_header(r).name).collect();
+            let rows = solution.into_iter().map(|r| self.row_header(r).name()).collect();
             Some(rows)
         } else {
             None
         }
     }
 
+    /// Removes the given node from its row by modifying its left/right siblings to point to one another.
+    fn remove_left_right(&mut self, index: NodeIndex) {
+        let left = self.node(index).left;
+        let right = self.node(index).right;
+        self.node_mut(right).left = left;
+        self.node_mut(left).right = right;
+    }
+
+    /// Removes the given node from its column by modifying its up/down siblings to point to one another.
+    fn remove_up_down(&mut self, index: NodeIndex) {
+        let u = self.node(index).up;
+        let d = self.node(index).down;
+        self.node_mut(d).up = u;
+        self.node_mut(u).down = d;
+    }
+
+    /// Restores the given node to its row list by modifying its left/right siblings to once again point to it.
+    fn restore_left_right(&mut self, index: NodeIndex) {
+        let l = self.node(index).left;
+        let r = self.node(index).right;
+        self.node_mut(r).left = index;
+        self.node_mut(l).right = index;
+    }
+
+    /// Restores the given node to its column list by modifying its up/down siblings to once again point to it.
+    fn restore_up_down(&mut self, index: NodeIndex) {
+        let u = self.node(index).up;
+        let d = self.node(index).down;
+        self.node_mut(d).up = index;
+        self.node_mut(u).down = index;
+    }
+
     fn search_recursive(&mut self, solution: &mut Vec<RowIndex>) -> bool {
         // 1. Find the next column to cover.
-        let Some(col) = self.select_next_column() else {
-            // There are no more columns! We have covered all the required criteria. We're done.
-            return true;
+        let col = match self.select_next_column() {
+            ColumnResult::Next(col) => col,
+            ColumnResult::SearchSuccess => return true,
+            ColumnResult::SearchFailure => return false,
         };
 
-        // 2. Mark this column as being covered.
+        // 2. Mark this column as being covered. It technically hasn't actually been covered yet, but that's what we're
+        //    working on right now; it will be covered once we actually make our choice of row.
         self.cover_column(col);
 
-        // 3. Attempt all rows within this column (TODO: sort them first).
-        let mut success = false;
+        // 3. Attempt all rows within this column. (TODO: maybe sort them first?)
+        let mut solution_found = false;
 
-        let c = self.column(col).node;
-        let mut r = self.node(c).down;
-        while r != c {
+        let start = self.column(col).node;
+        let mut r = self.node(start).down;
+        while r != start {
             // 1. First, take note that we are attempting this row.
             solution.push(self.node(r).row);
 
-            // 2. Go ahead and cover all the columns this row is a part of. Recall that the current column has already
-            // been covered, so we start one to the right.
-            let mut j = self.node(r).right;
-            while j != r {
-                self.cover_column(self.node(j).column);
-                j = self.node(j).right;
-            }
+            // 2. Cover all the columns this row is a part of; they have now had their criteria met.
+            self.choose_row(r);
 
-            // 3. Do we find a solution after covering this row?
-            success = self.search_recursive(solution);
+            // 3. Before we descend recursively, we need to ensure that this row is not selected again. This is not a
+            //    problem in the base algorithm since, in that version, the current column would have been removed
+            //    entirely.
+            self.remove_up_down(r);
 
-            // 4. Before we check that and move on, restore the matrix to how it was before.
-            let mut j = self.node(r).left;
-            while j != r {
-                self.uncover_column(self.node(j).column);
-                j = self.node(j).left;
-            }
+            // 4. Do we find a solution after covering this row?
+            solution_found = self.search_recursive(solution);
 
-            // 5. If we did find a solution, we can break out of here! No need to check any more rows.
-            if success {
+            // 5. Even if we found a solution, be sure to restore the matrix before we check `success` and move on. We
+            //    need to ensure that the matrix is back in its original state so that it can be reused for another
+            //    puzzle.
+            self.restore_up_down(r);
+            self.unchoose_row(r);
+
+            // 6. If we did find a solution, we can break out of here! No need to check any more rows.
+            if solution_found {
                 break;
             }
 
@@ -221,14 +300,14 @@ impl<R, C> Matrix<R, C> {
             r = self.node(r).down;
         }
 
-        // Regardless of if we saw success or not, we need to leave the matrix in the same state we found it in before
-        // returning.
+        // 4. Regardless of if we saw success or not, we need to leave the matrix in the same state we found it in
+        //    before returning.
         self.uncover_column(col);
 
-        success
+        solution_found
     }
 
-    fn select_next_column(&self) -> Option<ColIndex> {
+    fn select_next_column(&self) -> ColumnResult {
         // Look for the column with the smallest branching factor.
         let mut min = None;
         let mut idx = self.root().right;
@@ -236,8 +315,14 @@ impl<R, C> Matrix<R, C> {
         while idx != NodeIndex::ROOT {
             let col_index = self.node(idx).column;
             let col_header = self.column(col_index);
-            let branch_factor = col_header.count * col_header.size;
 
+            // If there are any columns that need to be covered some `n` more times, but which do not actually have `n`
+            // more rows to choose from, then this entire branch of the search is invalid, and can be pruned.
+            if col_header.choices < col_header.count {
+                return ColumnResult::SearchFailure;
+            }
+
+            let branch_factor = col_header.count * col_header.choices;
             if min.is_none_or(|(_, min_bf)| branch_factor < min_bf) {
                 min = Some((col_index, branch_factor));
             }
@@ -245,70 +330,102 @@ impl<R, C> Matrix<R, C> {
             idx = self.node(idx).right;
         }
 
-        Some(min?.0)
+        // If there are no more columns, we have covered all the required criteria. We're done!
+        match min {
+            Some((col, _)) => ColumnResult::Next(col),
+            None => ColumnResult::SearchSuccess,
+        }
     }
 
     fn cover_column(&mut self, col: ColIndex) {
-        let c = self.column(col).node;
+        // In our version of DLX, covering a column starts only by decrementing the `count` of the column. Only if the
+        // count hits zero do we actually consider the criteria fully met. This way, all the rows in this column remain
+        // in this column as valid choices for the next step of the algorithm. Then, before we "choose" each row, we
+        // remove that specific one
+        self.column_mut(col).count -= 1;
+        if self.column(col).count == 0 {
+            let start: NodeIndex = self.column(col).node;
 
-        // [TODO] Handle size/count here.
+            // Once the column's criteria has been fully met, that means that all rows within this column are no longer
+            // valid choices for any other columns. Additionally, it means that this column should never be selected
+            // again. So, we start by removing this column's header from the header list (left/right).
+            self.remove_left_right(start);
 
-        // Remove node `c` from the header list by making its L/R pointers go around it
-        let l = self.node(c).left;
-        let r = self.node(c).right;
-        self.node_mut(r).left = l;
-        self.node_mut(l).right = r;
+            // Next, we loop down the rows of this column and remove their nodes from all other column lists. NOTE THAT
+            // THIS IS A ONE-WAY OPERATION. It means that all the *other* rows above and below this one no longer point
+            // into this row, but we still point outwards to them (which allows the next phase of the algorithm, where
+            // we select one of these rows as our next choice, to continue).
+            let mut r: NodeIndex = self.node(start).down;
+            while r != start {
+                let mut j: NodeIndex = self.node(r).right;
+                while j != r {
+                    self.column_for_node_mut(j).choices -= 1;
+                    self.remove_up_down(j);
+                    j = self.node(j).right;
+                }
 
-        // For all rows within this column...
-        let mut i: NodeIndex = self.node(c).down;
-        while i != c {
-            // ... and for all nodes within this row (EXCEPT this particular node) ...
-            let mut j: NodeIndex = self.node(i).right;
-            while j != i {
-                // [TODO] Handle size/count here.
-
-                // ...remove them from their column list. This means that those columns no longer contain this row.
-                let u = self.node(j).up;
-                let d = self.node(j).down;
-                self.node_mut(d).up = u;
-                self.node_mut(u).down = d;
-
-                j = self.node(j).right;
+                r = self.node(r).down;
             }
-
-            i = self.node(i).down;
         }
     }
 
     fn uncover_column(&mut self, col: ColIndex) {
-        let c = self.column(col).node;
+        // Uncovering a column is the inverse of marking it as covered. Again, in our version of DLX, that means that we
+        // only need to do any proper changes if the column starts as being "completely" covered (i.e., had a count of
+        // zero before we re-incremented => now has a count of 1).
+        self.column_mut(col).count += 1;
+        if self.column(col).count == 1 {
+            // For all rows within this column, going up this time...
+            let start: NodeIndex = self.column(col).node;
+            let mut r: NodeIndex = self.node(start).up;
+            while r != start {
+                // ...and for all cells within this row (except this particular node), going left this time...
+                let mut j: NodeIndex = self.node(r).left;
+                while j != r {
+                    // ...re-add them to their column list.
+                    self.restore_up_down(j);
+                    self.column_for_node_mut(j).choices += 1;
+                    j = self.node(j).left;
+                }
 
-        // For all rows within this column, going up this time...
-        let mut i = self.node(c).up;
-        while i != c {
-            // ...and for all cells within this row (EXCEPT this particular node), going left this time...
-            let mut j = self.node(i).left;
-            while j != i {
-                // [TODO] Handle size/count here.
-
-                // ...re-add them to their column list.
-                let u = self.node(j).up;
-                let d = self.node(j).down;
-                self.node_mut(d).up = j;
-                self.node_mut(u).down = j;
-
-                j = self.node(j).left;
+                r = self.node(r).up;
             }
 
-            i = self.node(i).up;
+            self.restore_left_right(start);
         }
+    }
 
-        // [TODO] Handle size/count here.
+    fn choose_row(&mut self, start: NodeIndex) {
+        let node = self.node(start);
+        let mut j = node.right;
 
-        // Now we can re-add the column header back into the list.
-        let r = self.node(c).left;
-        let l = self.node(c).right;
-        self.node_mut(r).left = c;
-        self.node_mut(l).right = c;
+        #[cfg(debug_assertions)]
+        self.row_header_mut(node.row).mark_chosen_assert();
+
+        while j != start {
+            let col = self.node(j).column;
+            self.column_mut(col).choices -= 1;
+            self.cover_column(col);
+            self.remove_up_down(j);
+
+            j = self.node(j).right;
+        }
+    }
+
+    fn unchoose_row(&mut self, start: NodeIndex) {
+        let node = self.node(start);
+        let mut j = node.left;
+
+        #[cfg(debug_assertions)]
+        self.row_header_mut(node.row).mark_unchosen_assert();
+
+        while j != start {
+            let col = self.node(j).column;
+            self.restore_up_down(j);
+            self.uncover_column(col);
+            self.column_mut(col).choices += 1;
+
+            j = self.node(j).left;
+        }
     }
 }
