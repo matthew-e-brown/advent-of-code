@@ -1,95 +1,31 @@
-// Next [TODO]: Get the *construction* of the matrix working so that we can build a simple example in a `#[test]` and
-// see if this code works on the basic example from Wikipedia. *Then* we can worry about handling size/count.
+// [TODO] Re-add doc-comment.
 
-// #![allow(unused)]
-//! Custom implementation of Donald Knuth's _Algorithm X._
-//!
-//! # Overview
-//!
-//! 1.  Some columns describe optional criteria. These are criteria that do not need to be met; but, if they are, all
-//!     rows that conflict with them are covered.
-//!     - In our specific case, that's one column for each tile in the [`Region`].
-//! 2.  Some columns describe criteria that must be met exactly `N` times.
-//!     - In our case, that's one criteria for each [`PresentShape`], with `N` equal to their count in the [`Region`].
-//!
-//! To make 2. work, we have all rows within that column share a common count (stored within the column header). When an
-//! `N` column is "covered", the count is decremented. The column remains in the primary list of columns until this
-//! count hits zero. This essentially allows the column to act as multiple columns in one.
-//!
-//! The `count` on a multi-column is different from its `size` column; that one dictates how many *rows* still remain.
-//! When using the `S` heuristic from Knuth's paper, the `size` of a column still represents the "branching factor" of
-//! the column; it's just that, now, it also represents the branching factor of `N-1` other "pseudo-columns".
-//!
-//! To make 1. work, we need to have a quick way to check if the list of columns is empty, but while ignoring the
-//! optional columns. The way Knuth does this is by excluding the secondary columns from the main list entirely; their
-//! left and right pointers simply point to themselves. This is elegant in that it lets the algorithm continue
-//! completely as normal. However, in our case, we want to give the outside user a way to run a preliminary pass over
-//! all the columns. This... actually, should work totally fine? We already have a way to iterate over all column
-//! headers, even if they aren't attached: looping over the array!
-//!
-//! # Implementation details
-//!
-//! ## Column layout
-//!
-//! - Every single column gets a `count` property to handle multi-columns; the non-multi-columns just get it set to 1. A
-//!   multi-column with a count of `n` is equivalent to having `n` copies of the rows all with a 1 in their cell.
-//! - Optional columns have their `left`/`right` properties set to point to themselves. This makes them reachable while
-//!   covering a row but not while selecting a column to cover. They still have a count, like usual.
-//! - Matrix looks like:
-//!   - One non-optional column for each possible puzzle piece (present shape).
-//!   - One optional column for every single cell in the largest possible region.
-//!   - Then, for each puzzle piece, one row is generated for each of the possible orientations
-//!
-//! ## Before running
-//!
-//! - The differences between all the regions are: (1) they have a different size, and (2) they require different
-//!   numbers of pieces. So, before each run of the algorithm, we let the caller iterate over all column headers. This
-//!   lets them (a) adjust the counts for the puzzle columns, and (b) pre-cover the tile columns that fall outside the
-//!   next region.
-//!
-//! ## Algorithm
-//!
-//! 1.   Select the next column to cover according to some deterministic heuristic.
-//!      - We select the column with the smallest total "branching factor". The branching factor for a column is the
-//!        product of its `count` and its `size`.
-//!      - This choice is never backtracked. Once we select a column, we find the best possible
-//! 2.   "Cover" the chosen column:
-//!      1.  Decrement this column's `count` by one. If the count reaches zero, remove it from the list of column
-//!          headers.
-//!      2.  For each node in this column, run along its respective row and remove each node from all the other column
-//!          lists they appear in. When you do, decrement the `size` of that node's column.
-//!      -   In a sense, we haven't *actually* covered this column yet: we mark it as covered so that, when we step down
-//!          to the next layer of the algorithm, the subproblem we end up considering is "all the cases where this
-//!          column is already handled." This column will be truly covered once we reach the end of the recursive step.
-//! 3.   Order the rows within the chosen column by some other heuristic.
-//!      - In theory, as long as we allow for the choice of row to be backtracked, this algorithm will eventually
-//!        enumerate all solutions. But we don't want to find *all* solutions, we just need to find *one*. So, we will
-//!        select a row which appears to (a) minimize the branching factor and (b) have the most likely chance of being
-//!        correct.
-//! 4.   Iterate over all rows in the chosen column. This represents "attempting" each row's choice. For each row:
-//!      1.  Iterate over all nodes in the row; every column in which a node appears has now had its criteria met. Mark
-//!          it as covered:
-//!          1.  Same as before: decrement the column's `count` by one, and if it is zero, remove it from the column
-//!              list.
-//!
-//! ...TODO
+use self::builder::MatrixBuilder;
 
-pub struct Matrix<R, C = ()> {
+pub mod builder;
+
+/// A matrix that implements a modified version of Donald Knuth's _Algorithm X._
+pub struct Matrix<R, C> {
     nodes: Box<[Node]>,
     col_headers: Box<[ColHeader<C>]>,
     row_headers: Box<[RowHeader<R>]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct ColIndex(u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct RowIndex(u32);
-
+/// An index into [`Matrix::nodes`].
+///
+/// These are used as the main links to create the linked-lattice between the nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NodeIndex(u32);
 
-#[derive(Debug)]
+/// An index into [`Matrix::col_headers`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct ColIndex(u32);
+
+/// An index into [`Matrix::row_headers`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct RowIndex(u32);
+
+#[derive(Debug, Clone)]
 struct Node {
     column: ColIndex,
     row: RowIndex,
@@ -99,7 +35,7 @@ struct Node {
     right: NodeIndex,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RowHeader<R> {
     /// User-provided data used to identify this row.
     name: R,
@@ -108,7 +44,7 @@ struct RowHeader<R> {
     in_solution: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ColHeader<C> {
     /// User-provided data used to identify this column.
     name: C,
@@ -116,11 +52,12 @@ struct ColHeader<C> {
     choices: usize,
     /// The remaining number of times this column must be covered before it is considered done.
     count: usize,
-    /// The index of the dummy-node at the start of this column's list of nodes.
-    node: NodeIndex,
+    /// The index of the head node of this column's list of nodes.
+    head: NodeIndex,
 }
 
 impl NodeIndex {
+    /// The index of the root node.
     pub const ROOT: NodeIndex = NodeIndex(0);
 }
 
@@ -209,6 +146,11 @@ impl<R, C> Matrix<R, C> {
 }
 
 impl<R, C> Matrix<R, C> {
+    /// Creates a new empty [`MatrixBuilder`].
+    pub fn builder() -> builder::MatrixBuilder<R, C> {
+        MatrixBuilder::new()
+    }
+
     // [TODO] A way to pass preliminary modifications before doing the proper search (and then undo them afterwards).
     #[allow(unused)]
     pub fn search(&mut self) -> Option<Vec<&R>> {
@@ -268,7 +210,7 @@ impl<R, C> Matrix<R, C> {
         // 3. Attempt all rows within this column. (TODO: maybe sort them first?)
         let mut solution_found = false;
 
-        let start = self.column(col).node;
+        let start = self.column(col).head;
         let mut r = self.node(start).down;
         while r != start {
             // 1. First, take note that we are attempting this row.
@@ -344,7 +286,7 @@ impl<R, C> Matrix<R, C> {
         // remove that specific one
         self.column_mut(col).count -= 1;
         if self.column(col).count == 0 {
-            let start: NodeIndex = self.column(col).node;
+            let start: NodeIndex = self.column(col).head;
 
             // Once the column's criteria has been fully met, that means that all rows within this column are no longer
             // valid choices for any other columns. Additionally, it means that this column should never be selected
@@ -376,7 +318,7 @@ impl<R, C> Matrix<R, C> {
         self.column_mut(col).count += 1;
         if self.column(col).count == 1 {
             // For all rows within this column, going up this time...
-            let start: NodeIndex = self.column(col).node;
+            let start: NodeIndex = self.column(col).head;
             let mut r: NodeIndex = self.node(start).up;
             while r != start {
                 // ...and for all cells within this row (except this particular node), going left this time...

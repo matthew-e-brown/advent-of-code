@@ -1,6 +1,8 @@
 mod dlx;
 mod input;
 
+use self::dlx::Matrix;
+
 fn main() {
     let input = aoc_utils::puzzle_input();
     let (shapes, regions) = input::parse_input(input).unwrap();
@@ -36,6 +38,12 @@ fn main() {
             max_height = max_height.max(region.height());
         }
 
+        let mut builder = Matrix::<Row, Col>::builder();
+
         todo!();
     }
 }
+
+// Placeholders for now
+struct Row {}
+struct Col {}
