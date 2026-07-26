@@ -142,8 +142,6 @@ impl MatrixBuilder<Body> {
 }
 
 fn try_finish_columns(columns: Vec<Column>) -> BuilderResult<Body> {
-    MatrixBuilder::new().finish_columns().row([ColIndex::NONE]);
-
     const INITIAL_ROW_CAP: usize = 8;
 
     let num_columns = columns.len();
