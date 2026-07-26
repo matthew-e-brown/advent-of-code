@@ -2,6 +2,7 @@ mod dlx;
 mod input;
 
 use self::dlx::Matrix;
+use self::dlx::builder::Column;
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -38,12 +39,16 @@ fn main() {
             max_height = max_height.max(region.height());
         }
 
-        let mut builder = Matrix::<Row, Col>::builder();
+        // For columns, we need:
+        // - One required column for each present shape.
+        // - One optional column for each of the tiles in the board.
+        let mut builder = Matrix::build();
+        builder
+            .columns(std::iter::repeat_n(Column::required(), shapes.len()))
+            .columns(std::iter::repeat_n(Column::optional(), max_width * max_height));
 
-        todo!();
+        let mut builder = builder.finish_columns();
+
+        todo!("Add rows");
     }
 }
-
-// Placeholders for now
-struct Row {}
-struct Col {}

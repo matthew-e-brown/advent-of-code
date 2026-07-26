@@ -1,29 +1,21 @@
 // [TODO] Re-add doc-comment.
-
-use self::builder::MatrixBuilder;
+#![allow(dead_code)]
 
 pub mod builder;
+mod index;
+
+use self::builder::MatrixBuilder;
+pub use self::index::*;
+
 
 /// A matrix that implements a modified version of Donald Knuth's _Algorithm X._
-pub struct Matrix<R, C> {
-    nodes: Box<[Node]>,
-    col_headers: Box<[ColHeader<C>]>,
-    row_headers: Box<[RowHeader<R>]>,
-}
-
-/// An index into [`Matrix::nodes`].
 ///
-/// These are used as the main links to create the linked-lattice between the nodes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct NodeIndex(u32);
-
-/// An index into [`Matrix::col_headers`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct ColIndex(u32);
-
-/// An index into [`Matrix::row_headers`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct RowIndex(u32);
+/// Rows and columns are identified by their indices.
+pub struct Matrix {
+    nodes: Box<[Node]>,
+    col_headers: Box<[ColHeader]>,
+    row_headers: Box<[RowHeader]>,
+}
 
 #[derive(Debug, Clone)]
 struct Node {
@@ -36,52 +28,37 @@ struct Node {
 }
 
 #[derive(Debug, Clone)]
-struct RowHeader<R> {
-    /// User-provided data used to identify this row.
-    name: R,
+struct RowHeader {
+    /// This row's index.
+    index: RowIndex,
     /// Whether or not this row is used in the solution. Used for debugging.
     #[cfg(debug_assertions)]
     in_solution: bool,
 }
 
 #[derive(Debug, Clone)]
-struct ColHeader<C> {
-    /// User-provided data used to identify this column.
-    name: C,
+struct ColHeader {
+    /// This column's index.
+    index: ColIndex,
     /// The number of rows still remaining in this column.
     choices: usize,
     /// The remaining number of times this column must be covered before it is considered done.
     count: usize,
     /// The index of the head node of this column's list of nodes.
-    head: NodeIndex,
+    node: NodeIndex,
 }
 
-impl NodeIndex {
-    /// The index of the root node.
-    pub const ROOT: NodeIndex = NodeIndex(0);
-}
-
-impl ColIndex {
-    /// The [`ColIndex`] used by the root node (`h`) to denote that it does not have a column header.
-    pub const NONE: ColIndex = ColIndex(u32::MAX);
-}
-
-impl RowIndex {
-    /// The [`RowIndex`] used by the nodes in the header row to denote that they do not have a row header.
-    pub const NONE: RowIndex = RowIndex(u32::MAX);
-}
-
-impl<C> ColHeader<C> {
-    /// Gets the name of this column.
-    pub fn name(&self) -> &C {
-        &self.name
+impl ColHeader {
+    /// Gets the index of this column.
+    pub fn index(&self) -> ColIndex {
+        self.index
     }
 }
 
-impl<R> RowHeader<R> {
-    /// Gets the name of this row.
-    pub fn name(&self) -> &R {
-        &self.name
+impl RowHeader {
+    /// Gets the index of this row.
+    pub fn index(&self) -> RowIndex {
+        self.index
     }
 
     #[cfg(debug_assertions)]
@@ -107,56 +84,56 @@ enum ColumnResult {
     SearchFailure,
 }
 
-impl<R, C> Matrix<R, C> {
+impl Matrix {
     fn root(&self) -> &Node {
         self.node(NodeIndex::ROOT)
     }
 
     fn node(&self, i: NodeIndex) -> &Node {
-        &self.nodes[i.0 as usize]
+        &self.nodes[i.to_usize()]
     }
 
     fn node_mut(&mut self, i: NodeIndex) -> &mut Node {
-        &mut self.nodes[i.0 as usize]
+        &mut self.nodes[i.to_usize()]
     }
 
-    fn column(&self, i: ColIndex) -> &ColHeader<C> {
-        &self.col_headers[i.0 as usize]
+    fn column(&self, i: ColIndex) -> &ColHeader {
+        &self.col_headers[i.to_usize()]
     }
 
-    fn column_mut(&mut self, i: ColIndex) -> &mut ColHeader<C> {
-        &mut self.col_headers[i.0 as usize]
+    fn column_mut(&mut self, i: ColIndex) -> &mut ColHeader {
+        &mut self.col_headers[i.to_usize()]
     }
 
-    fn row_header(&self, i: RowIndex) -> &RowHeader<R> {
-        &self.row_headers[i.0 as usize]
+    fn row_header(&self, i: RowIndex) -> &RowHeader {
+        &self.row_headers[i.to_usize()]
     }
 
-    fn row_header_mut(&mut self, i: RowIndex) -> &mut RowHeader<R> {
-        &mut self.row_headers[i.0 as usize]
+    fn row_header_mut(&mut self, i: RowIndex) -> &mut RowHeader {
+        &mut self.row_headers[i.to_usize()]
     }
 
-    fn column_for_node(&self, i: NodeIndex) -> &ColHeader<C> {
+    fn column_for_node(&self, i: NodeIndex) -> &ColHeader {
         self.column(self.node(i).column)
     }
 
-    fn column_for_node_mut(&mut self, i: NodeIndex) -> &mut ColHeader<C> {
+    fn column_for_node_mut(&mut self, i: NodeIndex) -> &mut ColHeader {
         self.column_mut(self.node(i).column)
     }
 }
 
-impl<R, C> Matrix<R, C> {
+impl Matrix {
     /// Creates a new empty [`MatrixBuilder`].
-    pub fn builder() -> builder::MatrixBuilder<R, C> {
+    pub fn build() -> MatrixBuilder {
         MatrixBuilder::new()
     }
 
     // [TODO] A way to pass preliminary modifications before doing the proper search (and then undo them afterwards).
     #[allow(unused)]
-    pub fn search(&mut self) -> Option<Vec<&R>> {
+    pub fn search(&mut self) -> Option<Vec<RowIndex>> {
         let mut solution = Vec::new();
         if self.search_recursive(&mut solution) {
-            let rows = solution.into_iter().map(|r| self.row_header(r).name()).collect();
+            let rows = solution.into_iter().map(|r| self.row_header(r).index()).collect();
             Some(rows)
         } else {
             None
@@ -210,7 +187,7 @@ impl<R, C> Matrix<R, C> {
         // 3. Attempt all rows within this column. (TODO: maybe sort them first?)
         let mut solution_found = false;
 
-        let start = self.column(col).head;
+        let start = self.column(col).node;
         let mut r = self.node(start).down;
         while r != start {
             // 1. First, take note that we are attempting this row.
@@ -286,7 +263,7 @@ impl<R, C> Matrix<R, C> {
         // remove that specific one
         self.column_mut(col).count -= 1;
         if self.column(col).count == 0 {
-            let start: NodeIndex = self.column(col).head;
+            let start: NodeIndex = self.column(col).node;
 
             // Once the column's criteria has been fully met, that means that all rows within this column are no longer
             // valid choices for any other columns. Additionally, it means that this column should never be selected
@@ -318,7 +295,7 @@ impl<R, C> Matrix<R, C> {
         self.column_mut(col).count += 1;
         if self.column(col).count == 1 {
             // For all rows within this column, going up this time...
-            let start: NodeIndex = self.column(col).head;
+            let start: NodeIndex = self.column(col).node;
             let mut r: NodeIndex = self.node(start).up;
             while r != start {
                 // ...and for all cells within this row (except this particular node), going left this time...
