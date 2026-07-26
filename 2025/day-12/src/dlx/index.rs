@@ -1,103 +1,83 @@
-use std::error::Error;
-use std::fmt::Display;
+use super::error::BuilderError;
 
-// Allows configuring the inner size of each of the new-type structs.
-type ColIdxInner = u32;
-type RowIdxInner = u32;
-type NodeIdxInner = u32;
 
 /// An index that refers to a specific column in a [`Matrix`][super::Matrix].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ColIndex(pub(super) ColIdxInner);
+pub struct ColIndex(u32);
 
 /// An index that refers to a specific row in a [`Matrix`][super::Matrix].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RowIndex(pub(super) RowIdxInner);
+pub struct RowIndex(u32);
 
 /// An index into [`super::Matrix::nodes`].
 ///
 /// These are used as the main links to create the linked-lattice between the nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(super) struct NodeIndex(pub(super) NodeIdxInner);
+pub(super) struct NodeIndex(u32);
+
 
 impl NodeIndex {
     /// The index of the root node.
     pub(super) const ROOT: NodeIndex = NodeIndex(0);
 
     /// The maximum valid node index.
-    pub const MAX: NodeIndex = NodeIndex(NodeIdxInner::MAX);
+    pub const MAX: NodeIndex = NodeIndex(u32::MAX);
+
+    pub const fn to_usize(self) -> usize {
+        self.0 as usize
+    }
 }
 
 impl ColIndex {
     /// The [`ColIndex`] used by the root node (`h`) to denote that it does not have a column header.
-    pub(super) const NONE: ColIndex = ColIndex(ColIdxInner::MAX);
+    pub(super) const NONE: ColIndex = ColIndex(u32::MAX);
 
     /// The maximum valid column index.
-    pub const MAX: ColIndex = ColIndex(ColIdxInner::MAX - 1);
+    pub const MAX: ColIndex = ColIndex(u32::MAX - 1);
+
+    pub const fn to_usize(self) -> usize {
+        self.0 as usize
+    }
 }
 
 impl RowIndex {
     /// The [`RowIndex`] used by the nodes in the header row to denote that they do not have a row header.
-    pub(super) const NONE: RowIndex = RowIndex(RowIdxInner::MAX);
+    pub(super) const NONE: RowIndex = RowIndex(u32::MAX);
 
     /// The maximum valid row index.
-    pub const MAX: RowIndex = RowIndex(RowIdxInner::MAX - 1);
-}
+    pub const MAX: RowIndex = RowIndex(u32::MAX - 1);
 
-/// An error that occurs when attempting to convert too large of a [`usize`] into a [`ColIndex`] or [`RowIndex`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IndexOverflowError {
-    pub(super) kind: IndexOverflowKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum IndexOverflowKind {
-    Nodes,
-    Cols,
-    Rows,
-}
-
-impl Display for IndexOverflowError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let kind = match self.kind {
-            IndexOverflowKind::Nodes => "node",
-            IndexOverflowKind::Rows => "row",
-            IndexOverflowKind::Cols => "column",
-        };
-        write!(f, "index overflow occurred: {kind} index too large")
+    pub const fn to_usize(self) -> usize {
+        self.0 as usize
     }
 }
 
-impl Error for IndexOverflowError {}
-
 macro_rules! index_conversions {
-    ($wrapper:ident, $inner:ident, $error_kind:expr) => {
-        impl $wrapper {
-            pub const fn to_usize(self) -> usize {
-                self.0 as usize
-            }
-        }
-
-        impl TryFrom<usize> for $wrapper {
-            type Error = IndexOverflowError;
-
-            fn try_from(n: usize) -> Result<Self, Self::Error> {
-                if n > (($wrapper::MAX).0 as usize) {
-                    Err(IndexOverflowError { kind: $error_kind })
-                } else {
-                    Ok($wrapper(n as $inner))
+    ($($wrapper:ident as $inner:ty, $make_err:expr;)*) => {
+        $(
+            impl From<$wrapper> for usize {
+                fn from(index: $wrapper) -> usize {
+                    index.to_usize()
                 }
             }
-        }
 
-        impl From<$wrapper> for usize {
-            fn from(index: $wrapper) -> usize {
-                index.to_usize()
+            impl TryFrom<usize> for $wrapper {
+                type Error = BuilderError;
+
+                fn try_from(n: usize) -> Result<$wrapper, BuilderError> {
+                    if n > (($wrapper::MAX).0 as usize) {
+                        Err($make_err)
+                    } else {
+                        Ok($wrapper(n as $inner))
+                    }
+                }
             }
-        }
+        )*
     };
 }
 
-index_conversions!(NodeIndex, NodeIdxInner, IndexOverflowKind::Nodes);
-index_conversions!(RowIndex, RowIdxInner, IndexOverflowKind::Rows);
-index_conversions!(ColIndex, ColIdxInner, IndexOverflowKind::Cols);
+index_conversions! {
+    NodeIndex as u32, BuilderError::node_overflow();
+    ColIndex as u32, BuilderError::col_overflow();
+    RowIndex as u32, BuilderError::row_overflow();
+}

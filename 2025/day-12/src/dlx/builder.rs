@@ -1,9 +1,6 @@
-pub mod error;
-
 use std::collections::HashSet;
 
-#[allow(unused)]
-pub use self::error::{BuilderError, BuilderErrorKind};
+use self::error::BuilderError;
 use super::*;
 
 
@@ -80,21 +77,26 @@ impl MatrixBuilder<Header> {
     /// Pushes an existing column specification into the list of columns.
     pub fn column(&mut self, column: Column) -> &mut Self {
         if let Ok(Header { columns }) = &mut self.state {
-            columns.push(column);
-            if let Err(e) = ColIndex::try_from(columns.len()) {
-                self.state = Err(e.into())
+            // Is there any space for this next column?
+            match ColIndex::try_from(columns.len()) {
+                Ok(_) => columns.push(column),
+                Err(err) => self.state = Err(err),
             }
         }
 
         self
     }
 
-    /// Extends the list of column specifications with all of those in `specs`.
-    pub fn columns(&mut self, columns: impl IntoIterator<Item = Column>) -> &mut Self {
-        if let Ok(Header { columns: col_list }) = &mut self.state {
-            col_list.extend(columns);
-            if let Err(error) = ColIndex::try_from(col_list.len()) {
-                self.state = Err(error.into())
+    /// Extends the list of column specifications with all of those in `iter`.
+    pub fn columns(&mut self, iter: impl IntoIterator<Item = Column>) -> &mut Self {
+        if let Ok(Header { columns }) = &mut self.state {
+            // No idea how long this iterator is, so we'll check if it overflowed `ColIndex` after the extend.
+            columns.extend(iter);
+
+            // We check for `len - 1` (the index of the last column) instead of the length because there's a chance that
+            // they have pushed it *right* up until the end, which shouldn't cause an error.
+            if let Some(err) = columns.len().checked_sub(1).and_then(|i| ColIndex::try_from(i).err()) {
+                self.state = Err(err);
             }
         }
 

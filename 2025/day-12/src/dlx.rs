@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod builder;
+pub mod error;
 mod index;
 
 use self::builder::MatrixBuilder;
