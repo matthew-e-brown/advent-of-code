@@ -20,9 +20,6 @@ pub struct Region {
     counts: Box<[usize]>,
 }
 
-#[expect(unused)] // Just to shut the warnings up for now.
-// `expect(unused)` over `allow(unused)` will turn this into an error when the last thing gets used; that way, we'll
-// know to remove this when the time comes.
 impl PresentShape {
     /// Returns the width of this shape's bounding box.
     pub fn width(&self) -> usize {
@@ -45,6 +42,7 @@ impl PresentShape {
     }
 
     /// Creates a new shape out of a list of points.
+    #[expect(unused)]
     pub fn from_points(points: impl IntoIterator<Item = Point>) -> Self {
         let mut maxes = None;
         let mut points: Box<[Point]> = points
@@ -66,7 +64,6 @@ impl PresentShape {
     }
 }
 
-#[expect(unused)]
 impl Region {
     /// Returns the width of this region.
     pub fn width(&self) -> usize {
@@ -78,7 +75,7 @@ impl Region {
         self.height
     }
 
-    /// Returns the required amount of [`PresentShape`]
+    /// Returns a list describing how many of each [`PresentShape`] is required for this region.
     pub fn counts(&self) -> &[usize] {
         &self.counts
     }
@@ -130,6 +127,30 @@ pub fn parse_input(input: &str) -> Result<(Vec<PresentShape>, Vec<Region>), &'st
             None => {
                 let region = Region::from_str(line)?;
                 regions.push(region);
+            },
+        }
+    }
+
+    // Double check each region's `counts` array to make sure its indices match the number of present shapes:
+    for region in &mut regions {
+        if region.counts().len() != shapes.len() {
+            return Err("invalid puzzle input: region requested ");
+        }
+
+        let num_counts = region.counts().len();
+        match num_counts.cmp(&shapes.len()) {
+            cmp::Ordering::Equal => {},
+            cmp::Ordering::Greater => {
+                // This region has more counts than the number of present shapes.
+                return Err("invalid puzzle input: region requested more types of present shape than provided");
+            },
+            cmp::Ordering::Less => {
+                // This region has fewer counts than the number of present shapes. Recover by extending the list of
+                // counts with zeroes (we totally could have just errored out in this case, but it's not very hard to
+                // handle this case, so why not?).
+                let mut new_counts = vec![0; shapes.len()].into_boxed_slice();
+                new_counts[..num_counts].copy_from_slice(&region.counts);
+                region.counts = new_counts;
             },
         }
     }
@@ -237,20 +258,6 @@ pub enum Transform {
     ReflectSE = 7,
 }
 
-impl Transform {
-    /// An array containing all variants of this enum.
-    pub const VARIANTS: [Self; 8] = [
-        Transform::Identity,
-        Transform::RotateCW,
-        Transform::Rotate180,
-        Transform::RotateCCW,
-        Transform::ReflectV,
-        Transform::ReflectNE,
-        Transform::ReflectH,
-        Transform::ReflectSE,
-    ];
-}
-
 /// Transformations for [`PresentShape`]s.
 impl PresentShape {
     /// Creates a new [`PresentShape`] by applying a [`Transform`] to this one.
@@ -264,16 +271,18 @@ impl PresentShape {
     pub fn transform(&mut self, transform: Transform) {
         let w = self.width;
         let h = self.height;
+
+        #[rustfmt::skip]
         match transform {
             Transform::Identity => {},
-            Transform::RotateCW => self.do_transform(|(x, y)| (h - y - 1, x)),
+            Transform::RotateCW =>  self.do_transform(|(x, y)| (h - y - 1, x        )),
             Transform::Rotate180 => self.do_transform(|(x, y)| (w - x - 1, h - y - 1)),
-            Transform::RotateCCW => self.do_transform(|(x, y)| (y, w - x - 1)),
-            Transform::ReflectV => self.do_transform(|(x, y)| (w - x - 1, y)),
+            Transform::RotateCCW => self.do_transform(|(x, y)| (        y, w - x - 1)),
+            Transform::ReflectV =>  self.do_transform(|(x, y)| (w - x - 1, y        )),
             Transform::ReflectNE => self.do_transform(|(x, y)| (h - y - 1, w - x - 1)),
-            Transform::ReflectH => self.do_transform(|(x, y)| (x, h - y - 1)),
-            Transform::ReflectSE => self.do_transform(|(x, y)| (y, x)),
-        }
+            Transform::ReflectH =>  self.do_transform(|(x, y)| (        x, h - y - 1)),
+            Transform::ReflectSE => self.do_transform(|(x, y)| (        y, x        )),
+        };
     }
 
     /// Accepts a function that converts one `(x, y)` point into another and uses it to actually modify this present's
@@ -337,18 +346,19 @@ impl<'a> ShapePrinter<'a> {
         }
     }
 
-    #[expect(unused)]
+    #[allow(unused)]
     pub fn with_point_str(mut self, s: &'a str) -> Self {
         self.point_str = s;
         self
     }
 
-    #[expect(unused)]
+    #[allow(unused)]
     pub fn with_blank_str(mut self, s: &'a str) -> Self {
         self.blank_str = s;
         self
     }
 
+    #[allow(unused)]
     pub fn with_str_between_rows(mut self, s: &'a str) -> Self {
         self.between_rows = Some(s);
         self
@@ -385,8 +395,7 @@ impl<'a> Display for ShapePrinter<'a> {
 
 impl Display for PresentShape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = self.print().with_str_between_rows("\n");
-        f.write_fmt(format_args!("{str}"))
+        self.print().with_str_between_rows("\n").fmt(f)
     }
 }
 
@@ -400,13 +409,22 @@ impl Debug for PresentShape {
             // \t##.
             // \t#..
             // ```
-            let str = self.print().with_str_between_rows("\n\t");
-            f.write_fmt(format_args!("PresentShape(\n\t{str}\n)"))
+            write!(f, "PresentShape(\n\t{}\n)", self.print().with_str_between_rows("\n\t"))
         } else {
             // Non-alternate: print all in one line. `PresentShape([##.|##.|#..])`.
             let str = self.print().with_str_between_rows("|");
             f.debug_tuple("PresentShape").field(&format_args!("[{str}]")).finish()
         }
+    }
+}
+
+impl Display for Region {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}x{}:", self.width(), self.height())?;
+        for count in self.counts() {
+            write!(f, " {count}")?;
+        }
+        Ok(())
     }
 }
 
@@ -417,6 +435,20 @@ mod tests {
     use super::*;
 
     mod cases;
+
+    impl Transform {
+        /// An array containing all variants of this enum.
+        pub const VARIANTS: [Self; 8] = [
+            Transform::Identity,
+            Transform::RotateCW,
+            Transform::Rotate180,
+            Transform::RotateCCW,
+            Transform::ReflectV,
+            Transform::ReflectNE,
+            Transform::ReflectH,
+            Transform::ReflectSE,
+        ];
+    }
 
     /// Tests that shapes can be read to/from string format accurately and losslessly.
     mod in_out {
