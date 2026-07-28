@@ -113,13 +113,6 @@ impl MatrixBuilder<Header> {
 
 impl MatrixBuilder<Body> {
     /// Adds a row to this matrix, made of one node in each of the indicated columns.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if:
-    ///
-    /// - Any indices are out of range of the number of columns; or
-    /// - Any indices are provided more than once per row.
     pub fn row<I, C>(&mut self, column_indices: I)
     where
         I: IntoIterator<Item = C>,
@@ -223,7 +216,7 @@ where
     row_headers.push(RowHeader {
         index: row_idx,
         #[cfg(debug_assertions)]
-        in_solution: false,
+        chosen: false,
     });
 
     // Once we get to the end of the row, we will need to point the `right` pointer of the last node back at the first

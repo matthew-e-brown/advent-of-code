@@ -32,9 +32,9 @@ struct Node {
 struct RowHeader {
     /// This row's index.
     index: RowIndex,
-    /// Whether or not this row is used in the solution. Used for debugging.
+    /// Whether or not this row is currently being used in the solution. Used for debugging.
     #[cfg(debug_assertions)]
-    in_solution: bool,
+    chosen: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -63,18 +63,18 @@ impl RowHeader {
     }
 
     #[cfg(debug_assertions)]
-    fn mark_chosen_assert(&mut self) {
-        match self.in_solution {
+    fn assert_unchosen(&mut self) {
+        match self.chosen {
             true => panic!("attempted to use the same row twice in the same solution"),
-            false => self.in_solution = true,
+            false => self.chosen = true,
         };
     }
 
     #[cfg(debug_assertions)]
-    fn mark_unchosen_assert(&mut self) {
-        match self.in_solution {
+    fn assert_chosen(&mut self) {
+        match self.chosen {
             false => panic!("attempted to restore the same row more than once"),
-            true => self.in_solution = false,
+            true => self.chosen = false,
         }
     }
 }
@@ -320,7 +320,7 @@ impl Matrix {
         let mut j = node.right;
 
         #[cfg(debug_assertions)]
-        self.row_header_mut(node.row).mark_chosen_assert();
+        self.row_header_mut(node.row).assert_unchosen();
 
         while j != start {
             let col = self.node(j).column;
@@ -337,7 +337,7 @@ impl Matrix {
         let mut j = node.left;
 
         #[cfg(debug_assertions)]
-        self.row_header_mut(node.row).mark_unchosen_assert();
+        self.row_header_mut(node.row).assert_chosen();
 
         while j != start {
             let col = self.node(j).column;
