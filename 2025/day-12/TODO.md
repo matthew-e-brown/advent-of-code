@@ -1,8 +1,8 @@
 ## Step 1: Tidy up the builder impl
 
-- [ ] Get rid of the `Header` step
-- [ ] Convert `Body` into the main `MatrixBuilder` type
-- [ ] That type then just has a `from_columns` that accepts an
+- [x] Get rid of the `Header` step
+- [x] Convert `Body` into the main `MatrixBuilder` type
+- [x] That type then just has a `from_columns` that accepts an
       `IntoIterator<Item = Column>`
 - [ ] Need a new error_kind for when columns is empty (should maybe also add one
       for rows). (or is a matrix with no columns a non-error, since it is

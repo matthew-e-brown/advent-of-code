@@ -3,11 +3,11 @@ use super::error::BuilderError;
 
 /// An index that refers to a specific column in a [`Matrix`][super::Matrix].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ColIndex(u32);
+pub(super) struct ColIndex(u32);
 
 /// An index that refers to a specific row in a [`Matrix`][super::Matrix].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RowIndex(u32);
+pub(super) struct RowIndex(u32);
 
 /// An index into [`super::Matrix::nodes`].
 ///
@@ -17,13 +17,13 @@ pub(super) struct NodeIndex(u32);
 
 
 impl NodeIndex {
-    /// The index of the root node.
+    /// The index of the root node. Always zero.
     pub(super) const ROOT: NodeIndex = NodeIndex(0);
 
     /// The maximum valid node index.
     pub const MAX: NodeIndex = NodeIndex(u32::MAX);
 
-    pub const fn to_usize(self) -> usize {
+    pub const fn index(self) -> usize {
         self.0 as usize
     }
 }
@@ -35,7 +35,7 @@ impl ColIndex {
     /// The maximum valid column index.
     pub const MAX: ColIndex = ColIndex(u32::MAX - 1);
 
-    pub const fn to_usize(self) -> usize {
+    pub const fn index(self) -> usize {
         self.0 as usize
     }
 }
@@ -47,7 +47,7 @@ impl RowIndex {
     /// The maximum valid row index.
     pub const MAX: RowIndex = RowIndex(u32::MAX - 1);
 
-    pub const fn to_usize(self) -> usize {
+    pub const fn index(self) -> usize {
         self.0 as usize
     }
 }
@@ -57,7 +57,7 @@ macro_rules! index_conversions {
         $(
             impl From<$wrapper> for usize {
                 fn from(index: $wrapper) -> usize {
-                    index.to_usize()
+                    index.index()
                 }
             }
 

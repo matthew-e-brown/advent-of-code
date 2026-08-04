@@ -5,8 +5,8 @@ pub mod builder;
 pub mod error;
 mod index;
 
-use self::builder::MatrixBuilder;
-pub use self::index::*;
+pub use builder::{MatrixBuilder, Column};
+use self::index::*;
 
 
 /// A matrix that implements a modified version of Donald Knuth's _Algorithm X._
@@ -91,27 +91,27 @@ impl Matrix {
     }
 
     fn node(&self, i: NodeIndex) -> &Node {
-        &self.nodes[i.to_usize()]
+        &self.nodes[i.index()]
     }
 
     fn node_mut(&mut self, i: NodeIndex) -> &mut Node {
-        &mut self.nodes[i.to_usize()]
+        &mut self.nodes[i.index()]
     }
 
     fn column(&self, i: ColIndex) -> &ColHeader {
-        &self.col_headers[i.to_usize()]
+        &self.col_headers[i.index()]
     }
 
     fn column_mut(&mut self, i: ColIndex) -> &mut ColHeader {
-        &mut self.col_headers[i.to_usize()]
+        &mut self.col_headers[i.index()]
     }
 
     fn row_header(&self, i: RowIndex) -> &RowHeader {
-        &self.row_headers[i.to_usize()]
+        &self.row_headers[i.index()]
     }
 
     fn row_header_mut(&mut self, i: RowIndex) -> &mut RowHeader {
-        &mut self.row_headers[i.to_usize()]
+        &mut self.row_headers[i.index()]
     }
 
     fn column_for_node(&self, i: NodeIndex) -> &ColHeader {
@@ -124,11 +124,6 @@ impl Matrix {
 }
 
 impl Matrix {
-    /// Creates a new empty [`MatrixBuilder`].
-    pub fn build() -> MatrixBuilder {
-        MatrixBuilder::new()
-    }
-
     // [TODO] A way to pass preliminary modifications before doing the proper search (and then undo them afterwards).
     #[allow(unused)]
     pub fn search(&mut self) -> Option<Vec<RowIndex>> {

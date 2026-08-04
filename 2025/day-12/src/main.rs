@@ -1,8 +1,7 @@
 mod dlx;
 mod input;
 
-use self::dlx::Matrix;
-use self::dlx::builder::Column;
+use self::dlx::{Matrix, MatrixBuilder, Column};
 
 fn main() {
     let input = aoc_utils::puzzle_input();
@@ -42,12 +41,10 @@ fn main() {
         // For columns, we need:
         // - One required column for each present shape.
         // - One optional column for each of the tiles in the board.
-        let mut builder = Matrix::build();
-        builder
-            .columns(std::iter::repeat_n(Column::required(), shapes.len()))
-            .columns(std::iter::repeat_n(Column::optional(), max_width * max_height));
-
-        let mut builder = builder.finish_columns();
+        let shape_cols = std::iter::repeat_n(Column::required(), shapes.len());
+        let tile_cols = std::iter::repeat_n(Column::optional(), max_width * max_height);
+        let columns = shape_cols.chain(tile_cols);
+        let mut builder = MatrixBuilder::from_columns(columns).unwrap();
 
         todo!("Add rows");
     }
