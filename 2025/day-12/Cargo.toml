@@ -5,8 +5,15 @@ edition = "2024"
 
 [dependencies]
 aoc_utils = { version = "*", path = "../../aoc_utils" }
+# Used for debugging
+serde = { optional = true, version = "1.0", features = ["derive"] }
+serde_json = { optional = true, version = "1.0", features = [] }
 
 [dev-dependencies]
 # Used to make writing tests for the puzzle shapes a bit easier.
 pretty_assertions = "1.4"
 indoc = "2.0"
+
+[features]
+default = ["serde-debug"]
+serde-debug = ["dep:serde", "dep:serde_json"]

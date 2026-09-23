@@ -42,15 +42,6 @@ impl MatrixBuilder {
         self.col_headers.len()
     }
 
-    /// Finish building this [matrix][Matrix].
-    pub fn finish(self) -> Matrix {
-        Matrix {
-            col_headers: self.col_headers,
-            row_headers: self.row_headers.into_boxed_slice(),
-            nodes: self.nodes.into_boxed_slice(),
-        }
-    }
-
     /// Creates a new [`MatrixBuilder`] out of a list of column specifications.
     ///
     /// The order of these columns is important: they are later identified by their index.
@@ -212,5 +203,30 @@ impl MatrixBuilder {
         }
 
         Ok(())
+    }
+
+    /// Finish building this [matrix][Matrix].
+    pub fn finish(self) -> Matrix {
+        // Once all rows have been placed, the last step is to loop down the column headers one last time and connect
+        // them up to the things at the bottom of each column.
+        let Self {
+            col_headers,
+            row_headers,
+            col_stack,
+            mut nodes,
+        } = self;
+
+        for node_idx in col_stack {
+            let node = &mut nodes[node_idx.index()];
+            let head = col_headers[node.column.index()].node;
+            node.down = head;
+            nodes[head.index()].up = node_idx;
+        }
+
+        Matrix {
+            col_headers,
+            row_headers: row_headers.into_boxed_slice(),
+            nodes: nodes.into_boxed_slice(),
+        }
     }
 }
