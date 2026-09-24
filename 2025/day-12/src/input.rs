@@ -48,9 +48,10 @@ impl PresentShape {
         let mut points: Box<[Point]> = points
             .into_iter()
             .inspect(|&(x, y)| {
-                maxes = maxes
-                    .map(|(max_x, max_y)| (cmp::max(max_x, x), cmp::max(max_y, y)))
-                    .or(Some((x, y)));
+                maxes = Some(match maxes {
+                    Some((xmax, ymax)) => (x.max(xmax), y.max(ymax)),
+                    None => (x, y),
+                });
             })
             .collect();
         if let Some((max_x, max_y)) = maxes {
@@ -78,6 +79,10 @@ impl Region {
     /// Returns a list describing how many of each [`PresentShape`] is required for this region.
     pub fn counts(&self) -> &[usize] {
         &self.counts
+    }
+
+    pub fn is_in_bounds(&self, x: usize, y: usize) -> bool {
+        x < self.width && y < self.height
     }
 }
 
@@ -231,7 +236,7 @@ impl FromStr for Region {
 /// Represent all possible orientations/transformations that a [`PresentShape`] may be in.
 ///
 /// Corresponds to the eight different members of the _dihedral group of order 8_.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub enum Transform {
     /// No transformation.
     #[default]
@@ -256,6 +261,20 @@ pub enum Transform {
     ///
     /// Equivalent to a horizontal reflection followed by a 270° clockwise rotation.
     ReflectSE = 7,
+}
+
+impl Transform {
+    /// An array containing all variants of this enum.
+    pub const VARIANTS: [Self; 8] = [
+        Transform::Identity,
+        Transform::RotateCW,
+        Transform::Rotate180,
+        Transform::RotateCCW,
+        Transform::ReflectV,
+        Transform::ReflectNE,
+        Transform::ReflectH,
+        Transform::ReflectSE,
+    ];
 }
 
 /// Transformations for [`PresentShape`]s.
@@ -292,18 +311,19 @@ impl PresentShape {
         // as we go.
         let mut maxes = None;
         for point in &mut self.points {
-            let (new_x, new_y) = f(*point);
-            maxes = maxes
-                .map(|(max_x, max_y)| (cmp::max(max_x, new_x), cmp::max(max_y, new_y)))
-                .or(Some((new_x, new_y)));
-            *point = (new_x, new_y);
+            let (x, y) = f(*point);
+            *point = (x, y);
+            maxes = Some(match maxes {
+                Some((xmax, ymax)) => (x.max(xmax), y.max(ymax)),
+                None => (x, y),
+            });
         }
 
         // In theory, it's possible that the shape has zero points. Our `FromStr` impl doesn't allow it, but our
         // `from_points` does.
-        if let Some((max_x, max_y)) = maxes {
-            self.width = max_x + 1;
-            self.height = max_y + 1;
+        if let Some((xmax, ymax)) = maxes {
+            self.width = xmax + 1;
+            self.height = ymax + 1;
             // Also take the chance to make sure our points stay sorted.
             self.points.sort_unstable_by(cmp_points);
         } else {
@@ -435,20 +455,6 @@ mod tests {
     use super::*;
 
     mod cases;
-
-    impl Transform {
-        /// An array containing all variants of this enum.
-        pub const VARIANTS: [Self; 8] = [
-            Transform::Identity,
-            Transform::RotateCW,
-            Transform::Rotate180,
-            Transform::RotateCCW,
-            Transform::ReflectV,
-            Transform::ReflectNE,
-            Transform::ReflectH,
-            Transform::ReflectSE,
-        ];
-    }
 
     /// Tests that shapes can be read to/from string format accurately and losslessly.
     mod in_out {

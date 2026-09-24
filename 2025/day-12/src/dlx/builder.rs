@@ -1,4 +1,7 @@
-use super::error::BuilderError;
+use std::convert::Infallible;
+use std::error::Error;
+use std::fmt::Display;
+
 use super::index::{ColIndex, NodeIndex, RowIndex};
 use super::{ColHeader, Matrix, Node, RowHeader};
 
@@ -6,20 +9,22 @@ use super::{ColHeader, Matrix, Node, RowHeader};
 pub type BuilderResult<T> = Result<T, BuilderError>;
 
 #[derive(Debug, Clone)]
-pub struct Column {
+pub struct ColumnSpec {
+    /// The number of times this column must be covered before the matrix is considered solved.
     pub count: usize,
+    /// Whether or not this column is allowed to be left uncovered before the matrix is considered solved.
     pub optional: bool,
 }
 
-impl Column {
+impl ColumnSpec {
     /// Creates a new required column.
     pub const fn required() -> Self {
-        Column { count: 1, optional: false }
+        ColumnSpec { count: 1, optional: false }
     }
 
     /// Creates a new optional column.
     pub const fn optional() -> Self {
-        Column { count: 1, optional: true }
+        ColumnSpec { count: 1, optional: true }
     }
 
     /// Adjusts this column's _count_.
@@ -50,7 +55,7 @@ impl MatrixBuilder {
     ///
     /// This function can fail if too many columns are specified. Currently, the limit is <code>[u32::MAX] - 1</code>.
     /// Not that the practical limit is much lower, since
-    pub fn from_columns(columns: impl IntoIterator<Item = Column>) -> BuilderResult<MatrixBuilder> {
+    pub fn from_columns(columns: impl IntoIterator<Item = ColumnSpec>) -> BuilderResult<MatrixBuilder> {
         let mut col_headers = Vec::new();
         let mut nodes = Vec::new();
 
@@ -66,7 +71,7 @@ impl MatrixBuilder {
 
         // Each step, we reach backwards to the last non-optional node and link it to the newest node.
         let mut prev_req = NodeIndex::ROOT; // root node = index 0
-        for Column { count, optional } in columns {
+        for ColumnSpec { count, optional } in columns {
             let row_idx = RowIndex::NONE;
             let col_idx = ColIndex::try_from(col_headers.len())?;
             let node_idx = NodeIndex::try_from(nodes.len())?;
@@ -228,5 +233,64 @@ impl MatrixBuilder {
             row_headers: row_headers.into_boxed_slice(),
             nodes: nodes.into_boxed_slice(),
         }
+    }
+}
+
+
+/// An error that could occur during construction of a [DLX Matrix][super::Matrix].
+#[derive(Debug, Clone)]
+pub struct BuilderError {
+    kind: BuilderErrorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuilderErrorKind {
+    NodeOverflow,
+    ColOverflow,
+    RowOverflow,
+}
+
+impl BuilderError {
+    pub fn kind(&self) -> BuilderErrorKind {
+        self.kind
+    }
+
+    pub(super) const fn col_overflow() -> Self {
+        Self {
+            kind: BuilderErrorKind::ColOverflow,
+        }
+    }
+
+    pub(super) const fn row_overflow() -> Self {
+        Self {
+            kind: BuilderErrorKind::RowOverflow,
+        }
+    }
+
+    pub(super) const fn node_overflow() -> Self {
+        Self {
+            kind: BuilderErrorKind::NodeOverflow,
+        }
+    }
+}
+
+impl Display for BuilderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reason = match self.kind {
+            BuilderErrorKind::ColOverflow => "number of columns overflowed maximum allowed column index",
+            BuilderErrorKind::NodeOverflow => "number of nodes overflowed maximum allowed node index",
+            BuilderErrorKind::RowOverflow => "number of rows overflowed maximum allowed row index",
+        };
+
+        write!(f, "matrix construction failed: {reason}")
+    }
+}
+
+impl Error for BuilderError {}
+
+// Providing conversions from `Infallible` makes the types more versatile in generics:
+impl From<Infallible> for BuilderError {
+    fn from(err: Infallible) -> BuilderError {
+        match err {}
     }
 }

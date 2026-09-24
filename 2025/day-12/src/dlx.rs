@@ -2,35 +2,24 @@
 #![allow(dead_code)]
 
 pub mod builder;
-pub mod error;
 mod index;
 #[cfg(test)] mod tests;
 
-#[cfg(feature = "serde-debug")]
-use std::fmt::Debug;
-
-#[cfg(feature = "serde-debug")]
-use serde::Serialize;
-
-pub use self::builder::{Column, MatrixBuilder};
+pub use self::builder::{ColumnSpec, MatrixBuilder};
 use self::index::*;
 
 
 /// A matrix that implements a modified version of Donald Knuth's _Algorithm X._
 ///
 /// Rows and columns are identified by their indices.
-#[derive(Clone)]
-#[cfg_attr(feature = "serde-debug", derive(Serialize))]
-#[cfg_attr(not(feature = "serde-debug"), derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Matrix {
     nodes: Box<[Node]>,
     col_headers: Box<[ColHeader]>,
     row_headers: Box<[RowHeader]>,
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-#[cfg_attr(feature = "serde-debug", derive(Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Node {
     column: ColIndex,
     row: RowIndex,
@@ -41,7 +30,6 @@ struct Node {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde-debug", derive(Serialize))]
 struct RowHeader {
     /// This row's index.
     index: RowIndex,
@@ -51,7 +39,6 @@ struct RowHeader {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde-debug", derive(Serialize))]
 struct ColHeader {
     /// This column's index.
     index: ColIndex,
@@ -89,6 +76,74 @@ impl RowHeader {
         match self.chosen {
             false => panic!("attempted to restore the same row more than once"),
             true => self.chosen = false,
+        }
+    }
+}
+
+impl Matrix {
+    pub fn search(&mut self) -> Option<Vec<usize>> {
+        let mut solution = Vec::new();
+        if self.search_recursive(&mut solution) {
+            Some(solution)
+        } else {
+            None
+        }
+    }
+
+    pub fn prepared_search<F>(&mut self, mut f: F) -> Option<Vec<usize>>
+    where
+        F: FnMut(usize) -> usize,
+    {
+        let mut covered_columns = Vec::new();
+        for i in 0..self.col_headers.len() {
+            let header = &mut self.col_headers[i];
+            header.count = f(i);
+            if header.count == 0 {
+                let index = header.index;
+                self.cover_column(index);
+                covered_columns.push(index);
+            }
+        }
+
+        let mut solution = Vec::new();
+        let solution = if self.search_recursive(&mut solution) {
+            Some(solution)
+        } else {
+            None
+        };
+
+        // Uncover all the columns we covered, but in the other direction:
+        for index in covered_columns.into_iter().rev() {
+            self.uncover_column(index);
+        }
+
+        solution
+    }
+
+
+    pub fn set_column_counts<F>(&mut self, mut f: F)
+    where
+        F: FnMut(usize) -> usize,
+    {
+        for i in 0..self.col_headers.len() {
+            let col_idx = ColIndex::try_from(i).unwrap(); // Cannot be more than ColIndex::MAX headers
+
+            let old_count = self.col_headers[i].count;
+            let new_count = f(i);
+
+            match (old_count == 0, new_count == 0) {
+                // The count wasn't zero, but is now: column should be covered.
+                (false, true) => {
+                    self.cover_column(col_idx);
+                },
+                // The count was zero, but is no longer: column should be un-covered.
+                (true, false) => {
+                    self.uncover_column(col_idx);
+                },
+                _ => {},
+            }
+
+            self.col_headers[i].count = new_count;
         }
     }
 }
@@ -138,16 +193,6 @@ impl Matrix {
 }
 
 impl Matrix {
-    // [TODO] A way to pass preliminary modifications before doing the proper search (and then undo them afterwards).
-    pub fn search(&mut self) -> Option<Vec<usize>> {
-        let mut solution = Vec::new();
-        if self.search_recursive(&mut solution) {
-            Some(solution)
-        } else {
-            None
-        }
-    }
-
     /// Removes the given node from its row by modifying its left/right siblings to point to one another.
     fn remove_left_right(&mut self, index: NodeIndex) {
         let left = self.node(index).left;
@@ -325,18 +370,5 @@ impl Matrix {
         }
 
         self.restore_left_right(head);
-    }
-}
-
-#[cfg(feature = "serde-debug")]
-impl Debug for Matrix {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = if f.alternate() {
-            serde_json::to_string_pretty(self).unwrap()
-        } else {
-            serde_json::to_string(self).unwrap()
-        };
-
-        f.write_str(&s)
     }
 }

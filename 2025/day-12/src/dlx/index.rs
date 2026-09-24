@@ -1,26 +1,20 @@
 use std::fmt::Debug;
 
-#[cfg(feature = "serde-debug")]
-use serde::Serialize;
-
-use super::error::BuilderError;
+use super::builder::BuilderError;
 
 
 /// An index that refers to a specific column in a [`Matrix`][super::Matrix].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde-debug", derive(Serialize), serde(transparent))]
 pub(super) struct ColIndex(pub u32);
 
 /// An index that refers to a specific row in a [`Matrix`][super::Matrix].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde-debug", derive(Serialize), serde(transparent))]
 pub(super) struct RowIndex(pub u32);
 
 /// An index into [`super::Matrix::nodes`].
 ///
 /// These are used as the main links to create the linked-lattice between the nodes.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde-debug", derive(Serialize), serde(transparent))]
 pub(super) struct NodeIndex(pub u32);
 
 

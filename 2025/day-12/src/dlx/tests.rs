@@ -44,7 +44,7 @@ macro_rules! node {
 #[test]
 fn build_simple() {
 
-    let columns = std::iter::repeat_n(Column::required(), 4);
+    let columns = std::iter::repeat_n(ColumnSpec::required(), 4);
     let rows: [&[usize]; 4] = [&[0, 2], &[0, 2, 3], &[1], &[2, 3]];
 
     let mut builder = MatrixBuilder::from_columns(columns).unwrap();
@@ -77,15 +77,12 @@ fn build_simple() {
     ];
 
     assert_eq!(&matrix.nodes[..], expected_nodes);
-
-    #[cfg(feature = "serde-debug")]
-    println!("{matrix:?}");
 }
 
 /// Solves the "simple" example from above.
 #[test]
 fn solve_simple() {
-    let columns = std::iter::repeat_n(Column::required(), 4);
+    let columns = std::iter::repeat_n(ColumnSpec::required(), 4);
     let rows: [&[usize]; 4] = [&[0, 2], &[0, 2, 3], &[1], &[2, 3]];
 
     let mut builder = MatrixBuilder::from_columns(columns).unwrap();
@@ -119,7 +116,7 @@ fn solve_simple() {
 #[test]
 fn solve_wikipedia() {
 
-    let columns = std::iter::repeat_n(Column::required(), 7);
+    let columns = std::iter::repeat_n(ColumnSpec::required(), 7);
 
     let rows: [&[usize]; 6] = [&[0, 3, 6], &[0, 3], &[3, 4, 6], &[2, 4, 5], &[1, 2, 5], &[1, 6]];
 
@@ -137,9 +134,9 @@ fn solve_wikipedia() {
 /// Solves an example from my notebook.
 #[test]
 fn solve_notebook() {
-    let columns = [Column::required().count(2), Column::required().count(1)]
+    let columns = [ColumnSpec::required().count(2), ColumnSpec::required().count(1)]
         .into_iter()
-        .chain(std::iter::repeat_n(Column::optional().count(1), 8));
+        .chain(std::iter::repeat_n(ColumnSpec::optional().count(1), 8));
 
     let rows: [&[usize]; 9] = [
         &[0, 2, 3],
