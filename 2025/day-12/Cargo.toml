@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 aoc_utils = { version = "*", path = "../../aoc_utils" }
 indexmap = "2.14.2"
+thiserror = "2.0.21"
 
 [dev-dependencies]
 # Used to make writing tests for the puzzle shapes a bit easier.

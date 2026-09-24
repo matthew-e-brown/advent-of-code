@@ -1,5 +1,7 @@
-use super::*;
-
+use super::super::build::Constraint;
+use super::Node;
+use super::build::DLXBuilder;
+use super::index::*;
 
 /// Creates a new `Node { ... }` literal by manually specifying indices in `U, D, L, R` order.
 ///
@@ -43,17 +45,13 @@ macro_rules! node {
 /// ```
 #[test]
 fn build_simple() {
-
-    let columns = std::iter::repeat_n(ColumnSpec::required(), 4);
-    let rows: [&[usize]; 4] = [&[0, 2], &[0, 2, 3], &[1], &[2, 3]];
-
-    let mut builder = MatrixBuilder::from_columns(columns).unwrap();
-
-    for row in rows {
-        builder.add_row(row.into_iter().copied()).unwrap();
-    }
-
-    let matrix = builder.finish();
+    let constraints = Constraint::Required(1).repeat(4);
+    let matrix = DLXBuilder::from_constraints(constraints)
+        .row([0, 2])
+        .row([0, 2, 3])
+        .row([1])
+        .row([2, 3])
+        .finish();
 
     // To ensure valid construction, we manually specify what the nodes should look like:
     #[rustfmt::skip]
@@ -82,18 +80,15 @@ fn build_simple() {
 /// Solves the "simple" example from above.
 #[test]
 fn solve_simple() {
-    let columns = std::iter::repeat_n(ColumnSpec::required(), 4);
-    let rows: [&[usize]; 4] = [&[0, 2], &[0, 2, 3], &[1], &[2, 3]];
+    let constraints = Constraint::Required(1).repeat(4);
+    let mut matrix = DLXBuilder::from_constraints(constraints)
+        .row([0, 2])
+        .row([0, 2, 3])
+        .row([1])
+        .row([2, 3])
+        .finish();
 
-    let mut builder = MatrixBuilder::from_columns(columns).unwrap();
-
-    for row in rows {
-        builder.add_row(row.into_iter().copied()).unwrap();
-    }
-
-    let mut matrix = builder.finish();
     let solution = matrix.search();
-
     println!("Solution: {solution:?}");
 }
 
@@ -115,28 +110,26 @@ fn solve_simple() {
 /// ```
 #[test]
 fn solve_wikipedia() {
+    let constraints = Constraint::Required(1).repeat(7);
+    let mut matrix = DLXBuilder::from_constraints(constraints)
+        .row([0, 3, 6])
+        .row([0, 3])
+        .row([3, 4, 6])
+        .row([2, 4, 5])
+        .row([1, 2, 5])
+        .row([1, 6])
+        .finish();
 
-    let columns = std::iter::repeat_n(ColumnSpec::required(), 7);
-
-    let rows: [&[usize]; 6] = [&[0, 3, 6], &[0, 3], &[3, 4, 6], &[2, 4, 5], &[1, 2, 5], &[1, 6]];
-
-    let mut builder = MatrixBuilder::from_columns(columns).unwrap();
-    for row in rows {
-        builder.add_row(row.into_iter().copied()).unwrap();
-    }
-
-    let mut matrix = builder.finish();
     let solution = matrix.search();
-
     println!("Solution: {solution:?}");
 }
 
 /// Solves an example from my notebook.
 #[test]
 fn solve_notebook() {
-    let columns = [ColumnSpec::required().count(2), ColumnSpec::required().count(1)]
+    let constraints = [Constraint::Required(2), Constraint::Required(1)]
         .into_iter()
-        .chain(std::iter::repeat_n(ColumnSpec::optional().count(1), 8));
+        .chain(Constraint::Optional(1).repeat(8));
 
     let rows: [&[usize]; 9] = [
         &[0, 2, 3],
@@ -150,13 +143,12 @@ fn solve_notebook() {
         &[1, 5, 8, 9],
     ];
 
-    let mut builder = MatrixBuilder::from_columns(columns).unwrap();
+    let mut builder = DLXBuilder::from_constraints(constraints);
     for row in rows {
-        builder.add_row(row.into_iter().copied()).unwrap();
+        builder.push_row(row.into_iter().copied());
     }
 
     let mut matrix = builder.finish();
     let solution = matrix.search();
-
     println!("Solution: {solution:?}");
 }

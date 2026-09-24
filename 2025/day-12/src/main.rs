@@ -1,9 +1,10 @@
-mod dlx;
+mod cover;
 mod input;
 
 use indexmap::IndexSet;
 
-use self::dlx::{ColumnSpec, MatrixBuilder};
+use self::cover::build::Constraint;
+use self::cover::raw::build::DLXBuilder;
 use self::input::Transform;
 
 fn main() {
@@ -49,18 +50,18 @@ fn main() {
         // - One required column for each present shape.
         // - One optional column for each of the tiles in the board.
         for i in 0..shapes.len() {
-            columns.push(ColumnSpec::required());
+            columns.push(Constraint::Required(1)); // We will adjust the column counts later
             col_labels.insert(Criteria::Present(i));
         }
 
         for y in 0..max_height {
             for x in 0..max_width {
-                columns.push(ColumnSpec::optional());
+                columns.push(Constraint::Optional(1));
                 col_labels.insert(Criteria::Tile(x, y));
             }
         }
 
-        let mut builder = MatrixBuilder::from_columns(columns).unwrap();
+        let mut builder = DLXBuilder::try_from_constraints(columns).unwrap();
 
         // Now, for all possible positions of all possible
         for (i, shape) in shapes.iter().enumerate() {
@@ -88,7 +89,7 @@ fn main() {
                                 .expect("all tiles should have been added to the matrix")
                         });
 
-                        builder.add_row(col_indices).unwrap();
+                        builder.try_push_row(col_indices).unwrap();
 
                         x += 1;
                     }

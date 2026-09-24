@@ -1,22 +1,10 @@
 use std::fmt::Debug;
 
-use super::builder::BuilderError;
-
-
-/// An index that refers to a specific column in a [`Matrix`][super::Matrix].
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(super) struct ColIndex(pub u32);
-
-/// An index that refers to a specific row in a [`Matrix`][super::Matrix].
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(super) struct RowIndex(pub u32);
-
-/// An index into [`super::Matrix::nodes`].
+/// An index into [`super::DLXMatrix::nodes`].
 ///
 /// These are used as the main links to create the linked-lattice between the nodes.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(super) struct NodeIndex(pub u32);
-
+pub(in super::super) struct NodeIndex(pub u32);
 
 impl NodeIndex {
     /// The index of the root node. Always zero.
@@ -25,10 +13,14 @@ impl NodeIndex {
     /// The maximum valid node index.
     pub const MAX: NodeIndex = NodeIndex(u32::MAX);
 
-    pub const fn index(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self.0 as usize
     }
 }
+
+/// An index that refers to a specific column in a [`DLXMatrix`][super::DLXMatrix].
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(in super::super) struct ColIndex(pub u32);
 
 impl ColIndex {
     /// The [`ColIndex`] used by the root node (`h`) to denote that it does not have a column header.
@@ -37,10 +29,14 @@ impl ColIndex {
     /// The maximum valid column index.
     pub const MAX: ColIndex = ColIndex(u32::MAX - 1);
 
-    pub const fn index(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self.0 as usize
     }
 }
+
+/// An index that refers to a specific row in a [`DLXMatrix`][super::DLXMatrix].
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(in super::super) struct RowIndex(pub u32);
 
 impl RowIndex {
     /// The [`RowIndex`] used by the nodes in the header row to denote that they do not have a row header.
@@ -49,26 +45,38 @@ impl RowIndex {
     /// The maximum valid row index.
     pub const MAX: RowIndex = RowIndex(u32::MAX - 1);
 
-    pub const fn index(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self.0 as usize
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
+#[error("number of nodes too large: overflow occurred")]
+pub struct NodeOverflowError;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
+#[error("number of columns too large: overflow occurred")]
+pub struct ColOverflowError;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
+#[error("number of rows too large: overflow occurred")]
+pub struct RowOverflowError;
+
 macro_rules! index_conversions {
-    ($($wrapper:ident as $inner:ty, $make_err:expr;)*) => {
+    ($($wrapper:ident as $inner:ty, $err_name:ident;)*) => {
         $(
             impl From<$wrapper> for usize {
                 fn from(index: $wrapper) -> usize {
-                    index.index()
+                    index.to_usize()
                 }
             }
 
             impl TryFrom<usize> for $wrapper {
-                type Error = BuilderError;
+                type Error = $err_name;
 
-                fn try_from(n: usize) -> Result<$wrapper, BuilderError> {
+                fn try_from(n: usize) -> Result<$wrapper, $err_name> {
                     if n > (($wrapper::MAX).0 as usize) {
-                        Err($make_err)
+                        Err($err_name)
                     } else {
                         Ok($wrapper(n as $inner))
                     }
@@ -79,9 +87,9 @@ macro_rules! index_conversions {
 }
 
 index_conversions! {
-    NodeIndex as u32, BuilderError::node_overflow();
-    ColIndex as u32, BuilderError::col_overflow();
-    RowIndex as u32, BuilderError::row_overflow();
+    NodeIndex as u32, NodeOverflowError;
+    ColIndex as u32, ColOverflowError;
+    RowIndex as u32, RowOverflowError;
 }
 
 // For debugging, always print indices with no indentation or any other special formatting.

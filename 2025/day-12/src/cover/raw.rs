@@ -1,11 +1,10 @@
 // [TODO] Re-add doc-comment.
 #![allow(dead_code)]
 
-pub mod builder;
-mod index;
+pub mod build;
+pub(super) mod index;
 #[cfg(test)] mod tests;
 
-pub use self::builder::{ColumnSpec, MatrixBuilder};
 use self::index::*;
 
 
@@ -13,7 +12,7 @@ use self::index::*;
 ///
 /// Rows and columns are identified by their indices.
 #[derive(Clone, Debug)]
-pub struct Matrix {
+pub struct DLXMatrix {
     nodes: Box<[Node]>,
     col_headers: Box<[ColHeader]>,
     row_headers: Box<[RowHeader]>,
@@ -80,7 +79,7 @@ impl RowHeader {
     }
 }
 
-impl Matrix {
+impl DLXMatrix {
     pub fn search(&mut self) -> Option<Vec<usize>> {
         let mut solution = Vec::new();
         if self.search_recursive(&mut solution) {
@@ -154,33 +153,33 @@ enum ColumnResult {
     SearchFailure,
 }
 
-impl Matrix {
+impl DLXMatrix {
     fn root(&self) -> &Node {
         self.node(NodeIndex::ROOT)
     }
 
     fn node(&self, i: NodeIndex) -> &Node {
-        &self.nodes[i.index()]
+        &self.nodes[i.to_usize()]
     }
 
     fn node_mut(&mut self, i: NodeIndex) -> &mut Node {
-        &mut self.nodes[i.index()]
+        &mut self.nodes[i.to_usize()]
     }
 
     fn column(&self, i: ColIndex) -> &ColHeader {
-        &self.col_headers[i.index()]
+        &self.col_headers[i.to_usize()]
     }
 
     fn column_mut(&mut self, i: ColIndex) -> &mut ColHeader {
-        &mut self.col_headers[i.index()]
+        &mut self.col_headers[i.to_usize()]
     }
 
     fn row_header(&self, i: RowIndex) -> &RowHeader {
-        &self.row_headers[i.index()]
+        &self.row_headers[i.to_usize()]
     }
 
     fn row_header_mut(&mut self, i: RowIndex) -> &mut RowHeader {
-        &mut self.row_headers[i.index()]
+        &mut self.row_headers[i.to_usize()]
     }
 
     fn column_for_node(&self, i: NodeIndex) -> &ColHeader {
@@ -192,7 +191,7 @@ impl Matrix {
     }
 }
 
-impl Matrix {
+impl DLXMatrix {
     /// Removes the given node from its row by modifying its left/right siblings to point to one another.
     fn remove_left_right(&mut self, index: NodeIndex) {
         let left = self.node(index).left;
