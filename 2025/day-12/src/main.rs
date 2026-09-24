@@ -3,8 +3,7 @@ mod input;
 
 use indexmap::IndexSet;
 
-use self::cover::build::Constraint;
-use self::cover::raw::build::DLXBuilder;
+use self::cover::raw::build::{Constraint, DLXBuilder};
 use self::input::Transform;
 
 fn main() {
@@ -50,13 +49,13 @@ fn main() {
         // - One required column for each present shape.
         // - One optional column for each of the tiles in the board.
         for i in 0..shapes.len() {
-            columns.push(Constraint::Required(1)); // We will adjust the column counts later
+            columns.push(Constraint::required()); // We will adjust the column counts later
             col_labels.insert(Criteria::Present(i));
         }
 
         for y in 0..max_height {
             for x in 0..max_width {
-                columns.push(Constraint::Optional(1));
+                columns.push(Constraint::optional());
                 col_labels.insert(Criteria::Tile(x, y));
             }
         }

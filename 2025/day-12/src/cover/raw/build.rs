@@ -1,5 +1,4 @@
 use self::error::BuildError;
-use super::super::build::Constraint;
 use super::*;
 
 /// Builder for a [`DLXMatrix`].
@@ -10,6 +9,56 @@ pub struct DLXBuilder {
     col_stack: Box<[NodeIndex]>,
     nodes: Vec<Node>,
 }
+
+/// Specification for a column during construction of a DLX Matrix.
+///
+/// Each column/criterion has a "cover count" associated with it. This count determines how many times rows containing
+/// the column may be selected as part of a solution. Once a column has been covered by `n` columns, it and all rows
+/// which contain it are removed from consideration for the rest of the search.
+///
+/// - A required column with count `n` **must** be covered exactly `n` times before its associated cover problem is
+///   considered solved.
+/// - An optional column with count `n` may be covered **at most** `n` times.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Constraint {
+    pub count: usize,
+    pub optional: bool,
+}
+
+#[allow(dead_code)]
+impl Constraint {
+    pub const fn required() -> Self {
+        Constraint { count: 1, optional: false }
+    }
+
+    pub const fn optional() -> Self {
+        Constraint { count: 1, optional: true }
+    }
+
+    pub const fn with_count(self, count: usize) -> Self {
+        Constraint { count, ..self }
+    }
+
+    pub const fn to_required(self) -> Self {
+        Constraint { optional: false, ..self }
+    }
+
+    pub const fn to_optional(self) -> Self {
+        Constraint { optional: true, ..self }
+    }
+
+    /// Returns an iterator that repeats this criterion specification multiple times.
+    pub fn repeat(self, n: usize) -> std::iter::RepeatN<Self> {
+        std::iter::repeat_n(self, n)
+    }
+}
+
+impl Default for Constraint {
+    fn default() -> Self {
+        Self::required().with_count(1)
+    }
+}
+
 
 impl DLXBuilder {
     /// Creates a new builder for a raw [`DLXMatrix`] with the specified number of constraints.
@@ -22,7 +71,7 @@ impl DLXBuilder {
     /// This function will panic if too many columns (currently <code>[u32::MAX] - 1</code>) are specified. To create a
     /// new [`DLXBuilder`] fallibly, see [`DLXBuilder::try_from_constraints`].
     pub fn new(num_constraints: usize) -> Self {
-        Self::from_constraints(Constraint::Required(1).repeat(num_constraints))
+        Self::from_constraints(Constraint::default().repeat(num_constraints))
     }
 
     /// Creates a new builder for a raw [`DLXMatrix`] with the specified number of required and optional constraints.
@@ -36,8 +85,8 @@ impl DLXBuilder {
     /// This function will panic if the total number of columns is too large. The limit is currently <code>[u32::MAX] -
     /// 1</code>. To create a new [`DLXBuilder`] fallibly, see [`DLXBuilder::try_from_constraints`].
     pub fn new_with_optional(num_required: usize, num_optional: usize) -> Self {
-        let req = Constraint::Required(1).repeat(num_required);
-        let opt = Constraint::Optional(1).repeat(num_optional);
+        let req = Constraint::required().repeat(num_required);
+        let opt = Constraint::optional().repeat(num_optional);
         Self::from_constraints(req.chain(opt))
     }
 
@@ -73,7 +122,7 @@ impl DLXBuilder {
 
         // Each step, we reach backwards to the last non-optional node and link it to the newest node.
         let mut prev_req = NodeIndex::ROOT; // root node = index 0
-        for constraint in constraints {
+        for Constraint { count, optional } in constraints {
             let row_idx = RowIndex::NONE;
             let col_idx = ColIndex::try_from(col_headers.len()).map_err(BuildError::too_many_cols)?;
             let node_idx = NodeIndex::try_from(nodes.len()).map_err(BuildError::too_many_nodes)?;
@@ -89,7 +138,7 @@ impl DLXBuilder {
                 right: node_idx,
             };
 
-            if constraint.is_required() {
+            if !optional {
                 // We point backwards (left) at the last required node; it points forwards (right) at us.
                 node.left = prev_req;
                 nodes[prev_req.to_usize()].right = node_idx;
@@ -99,7 +148,7 @@ impl DLXBuilder {
             nodes.push(node);
 
             col_headers.push(ColHeader {
-                count: constraint.count(),
+                count,
                 choices: 0,
                 index: col_idx,
                 node: node_idx,

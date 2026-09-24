@@ -1,6 +1,5 @@
-use super::super::build::Constraint;
 use super::Node;
-use super::build::DLXBuilder;
+use super::build::{Constraint, DLXBuilder};
 use super::index::*;
 
 /// Creates a new `Node { ... }` literal by manually specifying indices in `U, D, L, R` order.
@@ -45,7 +44,7 @@ macro_rules! node {
 /// ```
 #[test]
 fn build_simple() {
-    let constraints = Constraint::Required(1).repeat(4);
+    let constraints = Constraint::required().repeat(4);
     let matrix = DLXBuilder::from_constraints(constraints)
         .row([0, 2])
         .row([0, 2, 3])
@@ -80,7 +79,7 @@ fn build_simple() {
 /// Solves the "simple" example from above.
 #[test]
 fn solve_simple() {
-    let constraints = Constraint::Required(1).repeat(4);
+    let constraints = Constraint::required().repeat(4);
     let mut matrix = DLXBuilder::from_constraints(constraints)
         .row([0, 2])
         .row([0, 2, 3])
@@ -110,7 +109,7 @@ fn solve_simple() {
 /// ```
 #[test]
 fn solve_wikipedia() {
-    let constraints = Constraint::Required(1).repeat(7);
+    let constraints = Constraint::required().repeat(7);
     let mut matrix = DLXBuilder::from_constraints(constraints)
         .row([0, 3, 6])
         .row([0, 3])
@@ -127,9 +126,12 @@ fn solve_wikipedia() {
 /// Solves an example from my notebook.
 #[test]
 fn solve_notebook() {
-    let constraints = [Constraint::Required(2), Constraint::Required(1)]
-        .into_iter()
-        .chain(Constraint::Optional(1).repeat(8));
+    let constraints = [
+        Constraint::required().with_count(2),
+        Constraint::required().with_count(1),
+    ]
+    .into_iter()
+    .chain(Constraint::optional().repeat(8));
 
     let rows: [&[usize]; 9] = [
         &[0, 2, 3],
