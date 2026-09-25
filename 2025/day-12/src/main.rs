@@ -3,7 +3,7 @@ mod input;
 
 use indexmap::IndexSet;
 
-use self::cover::dlx::build::{Constraint, MatrixBuilder};
+use self::cover::raw::build::{Constraint, MatrixBuilder};
 use self::input::Transform;
 
 fn main() {

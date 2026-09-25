@@ -1,6 +1,5 @@
-use super::Node;
 use super::build::{Constraint, MatrixBuilder};
-use super::index::*;
+use super::{ColIndex, Node, NodeIndex, RowIndex};
 
 /// Creates a new `Node { ... }` literal by manually specifying indices in `U, D, L, R` order.
 ///
