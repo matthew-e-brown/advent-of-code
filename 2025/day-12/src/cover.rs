@@ -1,9 +1,9 @@
 pub mod build;
 pub mod raw;
 
-/// A cover problem with **constraints** `C` and **choices** `R`.
-pub struct CoverProblem<C, R> {
+/// A cover problem with **constraints** `C` and **subsets** `S`.
+pub struct CoverProblem<C, S> {
     col_labels: indexmap::IndexSet<C>,
-    row_labels: indexmap::IndexSet<R>,
+    row_labels: indexmap::IndexSet<S>,
     matrix: raw::DLXMatrix,
 }

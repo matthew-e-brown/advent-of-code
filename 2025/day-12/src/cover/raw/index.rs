@@ -51,15 +51,15 @@ impl RowIndex {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
-#[error("number of nodes too large: overflow occurred")]
+#[error("node index too high: overflow occurred")]
 pub struct NodeOverflowError;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
-#[error("number of columns too large: overflow occurred")]
+#[error("column index too high: overflow occurred")]
 pub struct ColOverflowError;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, thiserror::Error)]
-#[error("number of rows too large: overflow occurred")]
+#[error("rows index too high: overflow occurred")]
 pub struct RowOverflowError;
 
 macro_rules! index_conversions {

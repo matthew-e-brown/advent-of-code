@@ -1,5 +1,21 @@
+use std::hash::Hash;
+
+use indexmap::IndexSet;
+
+use self::error::BuildError;
 use super::raw::build as raw;
 
+pub struct ProblemBuilder<C, S> {
+    col_labels: IndexSet<C>,
+    row_labels: IndexSet<S>,
+    inner: raw::DLXBuilder,
+}
+
+/// Specification for a constraint during the creation of a [`CoverProblem`].
+///
+/// Every constraint has a "cover count" associated with it. This count determines how many times subsets ...[TODO]
+///
+/// [`CoverProblem`]: super::CoverProblem
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Constraint<C> {
     pub label: C,
@@ -9,16 +25,13 @@ pub struct Constraint<C> {
 
 impl<C> Constraint<C> {
     /// Creates a [`raw`] version of this constraint.
-    pub fn raw(self) -> raw::Constraint {
+    pub const fn as_raw(&self) -> raw::Constraint {
         raw::Constraint {
             count: self.count,
             optional: self.optional,
         }
     }
-}
 
-#[allow(dead_code)]
-impl<C> Constraint<C> {
     pub const fn required(label: C) -> Self {
         Constraint { label, count: 1, optional: false }
     }
@@ -50,8 +63,133 @@ impl<C: Clone> Constraint<C> {
     }
 }
 
-impl<C: Default> Default for Constraint<C> {
-    fn default() -> Self {
-        Self::required(C::default()).with_count(1)
+impl<C, S> ProblemBuilder<C, S>
+where
+    C: Hash + Eq,
+{
+    pub fn new(constraints: impl IntoIterator<Item = Constraint<C>>) -> Result<Self, BuildError> {
+        let mut col_labels = IndexSet::new();
+        let mut raw_columns = Vec::new();
+
+        // [TODO]
+        //
+        // It's not nice how we have to iterate through this list twice (we do it once so we can stop at an error, and
+        // then the inner builder loops through the columns again). Now that I am looking at this again, what should
+        // happen is more clear:
+        //
+        // - The inner really should have two states: one for columns, and one for rows
+        // - Call them `dlx::HeaderBuilder` and `dlx::MatrixBuilder`.
+        // - The inner `try_from_constraints` function then gets broken up:
+        //   - Pushing the root node in happens when the `HeaderBuilder` is created
+        //   - The main loop is then a single `push_column` method
+        //   - The part after the main loop happens when converting from `HeaderBuilder` to `MatrixBuilder`.
+        // - (also I wanna rename `raw` to `dlx` and `raw::Constraint` to `dlx::Column`, then `Constraint::<C>::as_raw`
+        //   can become `as_raw_column` or something more descriptive).
+
+        for constraint in constraints {
+            raw_columns.push(constraint.as_raw());
+            if !col_labels.insert(constraint.label) {
+                return Err(BuildError::duplicate_constraint());
+            }
+        }
+
+        let inner = raw::DLXBuilder::try_from_constraints(raw_columns)?;
+        Ok(ProblemBuilder {
+            col_labels,
+            row_labels: IndexSet::new(),
+            inner,
+        })
+    }
+}
+
+impl<C, S> ProblemBuilder<C, S>
+where
+    C: Hash + Eq,
+    S: Hash + Eq,
+{
+    pub fn try_push_subset<'a, Q>(
+        &mut self,
+        label: S,
+        constraints: impl IntoIterator<Item = &'a Q>,
+    ) -> Result<(), BuildError>
+    where
+        Q: ?Sized + Hash + indexmap::Equivalent<C> + 'a,
+    {
+        if !self.row_labels.insert(label) {
+            return Err(BuildError::duplicate_subset());
+        }
+
+        self.inner
+            .try_push_row(constraints.into_iter().map(|label| match self.col_labels.get_index_of(label) {
+                Some(index) => index,
+                None => panic!("subset contains unknown constraint label"),
+            }))?;
+
+        Ok(())
+    }
+}
+
+pub mod error {
+    use std::fmt::Display;
+
+    use self::BuildErrorKind::ProblemTooLarge;
+    use super::super::raw::build::error::{MatrixOverflowError, MatrixOverflowKind};
+
+    #[derive(Debug, Clone)]
+    pub struct BuildError {
+        kind: BuildErrorKind,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum BuildErrorKind {
+        DuplicateConstraint,
+        DuplicateSubset,
+        ProblemTooLarge(MatrixOverflowError),
+    }
+
+    impl Display for BuildError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match &self.kind {
+                BuildErrorKind::DuplicateConstraint => {
+                    write!(f, "encountered multiple constraints with the same label")
+                },
+                BuildErrorKind::DuplicateSubset => write!(f, "encountered multiple choices with the same label"),
+                BuildErrorKind::ProblemTooLarge(inner) => match inner.kind() {
+                    MatrixOverflowKind::Cols => write!(f, "cover problem overflowed: too many constraints"),
+                    MatrixOverflowKind::Rows => write!(f, "cover problem overflowed: too many subsets"),
+                    MatrixOverflowKind::Nodes => write!(f, "cover problem too large: overflow occurred"),
+                },
+            }
+        }
+    }
+
+    impl std::error::Error for BuildError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            match &self.kind {
+                BuildErrorKind::DuplicateConstraint => None,
+                BuildErrorKind::DuplicateSubset => None,
+                BuildErrorKind::ProblemTooLarge(inner) => Some(inner),
+            }
+        }
+    }
+
+    impl BuildError {
+        pub(super) fn duplicate_constraint() -> Self {
+            Self {
+                kind: BuildErrorKind::DuplicateConstraint,
+            }
+        }
+
+        pub(super) fn duplicate_subset() -> Self {
+            Self {
+                kind: BuildErrorKind::DuplicateSubset,
+            }
+        }
+    }
+
+    impl From<MatrixOverflowError> for BuildError {
+        fn from(inner: MatrixOverflowError) -> Self {
+            BuildError { kind: ProblemTooLarge(inner) }
+        }
     }
 }

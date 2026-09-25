@@ -1,4 +1,4 @@
-use self::error::BuildError;
+pub use self::error::MatrixOverflowError;
 use super::*;
 
 /// Builder for a [`DLXMatrix`].
@@ -98,7 +98,10 @@ impl DLXBuilder {
     ///
     /// See [`try_from_constraints`][Self::try_from_constraints] for a fallible version of this method.
     pub fn from_constraints(constraints: impl IntoIterator<Item = Constraint>) -> Self {
-        Self::try_from_constraints(constraints).unwrap()
+        match Self::try_from_constraints(constraints) {
+            Ok(builder) => builder,
+            Err(err) => panic!("failed to create DLX builder: {err}"),
+        }
     }
 
     /// Creates a new builder for a raw [`DLXMatrix`] with the specified constraints in the specified order.
@@ -106,7 +109,9 @@ impl DLXBuilder {
     /// # Errors
     ///
     /// This function will fail if too many columns are specified. Currently, the limit is <code>[u32::MAX] - 1</code>.
-    pub fn try_from_constraints(constraints: impl IntoIterator<Item = Constraint>) -> Result<Self, BuildError> {
+    pub fn try_from_constraints(
+        constraints: impl IntoIterator<Item = Constraint>,
+    ) -> Result<Self, MatrixOverflowError> {
         let mut col_headers = Vec::new();
         let mut nodes = Vec::new();
 
@@ -124,8 +129,8 @@ impl DLXBuilder {
         let mut prev_req = NodeIndex::ROOT; // root node = index 0
         for Constraint { count, optional } in constraints {
             let row_idx = RowIndex::NONE;
-            let col_idx = ColIndex::try_from(col_headers.len()).map_err(BuildError::too_many_cols)?;
-            let node_idx = NodeIndex::try_from(nodes.len()).map_err(BuildError::too_many_nodes)?;
+            let col_idx = ColIndex::try_from(col_headers.len())?;
+            let node_idx = NodeIndex::try_from(nodes.len())?;
 
             // Create a node for an optional column first (points to itself in all directions). Then, if it's
             // non-optional, update its left/right.
@@ -191,8 +196,9 @@ impl DLXBuilder {
     ///
     /// See [`try_push_row`][Self::try_push_row] for details about panics and errors.
     pub fn push_row(&mut self, constraint_indices: impl IntoIterator<Item = usize>) {
-        if let Err(err) = self.try_push_row(constraint_indices) {
-            panic!("{err}");
+        match self.try_push_row(constraint_indices) {
+            Ok(()) => (),
+            Err(err) => panic!("failed to add row to DLX builder: {err}"),
         }
     }
 
@@ -222,7 +228,10 @@ impl DLXBuilder {
     ///
     /// - The same column is specified more than once within the same row.
     /// - An index greater than or equal to [`Self::num_columns`] is specified.
-    pub fn try_push_row(&mut self, constraint_indices: impl IntoIterator<Item = usize>) -> Result<(), BuildError> {
+    pub fn try_push_row(
+        &mut self,
+        constraint_indices: impl IntoIterator<Item = usize>,
+    ) -> Result<(), MatrixOverflowError> {
         let num_cols = self.col_headers.len();
         let Self {
             col_headers,
@@ -231,7 +240,7 @@ impl DLXBuilder {
             nodes,
         } = self;
 
-        let row_idx = RowIndex::try_from(row_headers.len()).map_err(BuildError::too_many_rows)?;
+        let row_idx = RowIndex::try_from(row_headers.len())?;
         row_headers.push(RowHeader {
             index: row_idx,
             #[cfg(debug_assertions)]
@@ -252,7 +261,7 @@ impl DLXBuilder {
             }
 
             let col_head = &mut col_headers[col_idx];
-            let node_idx = NodeIndex::try_from(nodes.len()).map_err(BuildError::too_many_nodes)?;
+            let node_idx = NodeIndex::try_from(nodes.len())?;
 
             // - The node above us is simply the most recent node in this column.
             // - If we're the first thing in the row, then our left pointer is ourselves; otherwise, the previous node.
@@ -320,34 +329,56 @@ impl DLXBuilder {
 }
 
 /// Errors that may occur during building of a [`DLXMatrix`].
-#[rustfmt::skip]
 pub mod error {
+    use std::fmt::Display;
+
     use super::super::index::{ColOverflowError, NodeOverflowError, RowOverflowError};
 
-    #[derive(Debug, Clone, Copy, thiserror::Error)]
-    #[error("could not build matrix: {kind}")]
-    pub struct BuildError {
-        kind: BuildErrorKind,
+    #[derive(Debug, Clone)]
+    pub struct MatrixOverflowError {
+        kind: MatrixOverflowKind,
     }
 
-    #[derive(Debug, Clone, Copy, thiserror::Error)]
-    pub enum BuildErrorKind {
-        #[error(transparent)] TooManyRows(RowOverflowError),
-        #[error(transparent)] TooManyCols(ColOverflowError),
-        #[error(transparent)] TooManyNodes(NodeOverflowError),
+    impl MatrixOverflowError {
+        pub const fn kind(&self) -> MatrixOverflowKind {
+            self.kind
+        }
     }
 
-    impl BuildError {
-        pub(super) fn too_many_rows(inner: RowOverflowError) -> Self {
-            Self { kind: BuildErrorKind::TooManyRows(inner) }
+    impl Display for MatrixOverflowError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(match self.kind {
+                MatrixOverflowKind::Rows => "number of rows too high: overflow occurred",
+                MatrixOverflowKind::Cols => "number of columns too high: overflow occurred",
+                MatrixOverflowKind::Nodes => "number of nodes too high: overflow occurred",
+            })
         }
+    }
 
-        pub(super) fn too_many_cols(inner: ColOverflowError) -> Self {
-            Self { kind: BuildErrorKind::TooManyCols(inner) }
+    impl std::error::Error for MatrixOverflowError {}
+
+    #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+    pub enum MatrixOverflowKind {
+        Rows,
+        Cols,
+        Nodes,
+    }
+
+    impl From<RowOverflowError> for MatrixOverflowError {
+        fn from(_: RowOverflowError) -> Self {
+            Self { kind: MatrixOverflowKind::Rows }
         }
+    }
 
-        pub(super) fn too_many_nodes(inner: NodeOverflowError) -> Self {
-            Self { kind: BuildErrorKind::TooManyNodes(inner) }
+    impl From<ColOverflowError> for MatrixOverflowError {
+        fn from(_: ColOverflowError) -> Self {
+            Self { kind: MatrixOverflowKind::Cols }
+        }
+    }
+
+    impl From<NodeOverflowError> for MatrixOverflowError {
+        fn from(_: NodeOverflowError) -> Self {
+            Self { kind: MatrixOverflowKind::Nodes }
         }
     }
 }
