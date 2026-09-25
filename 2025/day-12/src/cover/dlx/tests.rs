@@ -1,5 +1,5 @@
 use super::Node;
-use super::build::{Constraint, DLXBuilder};
+use super::build::{Constraint, MatrixBuilder};
 use super::index::*;
 
 /// Creates a new `Node { ... }` literal by manually specifying indices in `U, D, L, R` order.
@@ -45,7 +45,7 @@ macro_rules! node {
 #[test]
 fn build_simple() {
     let constraints = Constraint::required().repeat(4);
-    let matrix = DLXBuilder::from_constraints(constraints)
+    let matrix = MatrixBuilder::from_constraints(constraints)
         .row([0, 2])
         .row([0, 2, 3])
         .row([1])
@@ -80,7 +80,7 @@ fn build_simple() {
 #[test]
 fn solve_simple() {
     let constraints = Constraint::required().repeat(4);
-    let mut matrix = DLXBuilder::from_constraints(constraints)
+    let mut matrix = MatrixBuilder::from_constraints(constraints)
         .row([0, 2])
         .row([0, 2, 3])
         .row([1])
@@ -110,7 +110,7 @@ fn solve_simple() {
 #[test]
 fn solve_wikipedia() {
     let constraints = Constraint::required().repeat(7);
-    let mut matrix = DLXBuilder::from_constraints(constraints)
+    let mut matrix = MatrixBuilder::from_constraints(constraints)
         .row([0, 3, 6])
         .row([0, 3])
         .row([3, 4, 6])
@@ -145,7 +145,7 @@ fn solve_notebook() {
         &[1, 5, 8, 9],
     ];
 
-    let mut builder = DLXBuilder::from_constraints(constraints);
+    let mut builder = MatrixBuilder::from_constraints(constraints);
     for row in rows {
         builder.push_row(row.into_iter().copied());
     }

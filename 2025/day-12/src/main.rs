@@ -3,7 +3,7 @@ mod input;
 
 use indexmap::IndexSet;
 
-use self::cover::raw::build::{Constraint, DLXBuilder};
+use self::cover::dlx::build::{Constraint, MatrixBuilder};
 use self::input::Transform;
 
 fn main() {
@@ -60,7 +60,7 @@ fn main() {
             }
         }
 
-        let mut builder = DLXBuilder::try_from_constraints(columns).unwrap();
+        let mut builder = MatrixBuilder::try_from_constraints(columns).unwrap();
 
         // Now, for all possible positions of all possible
         for (i, shape) in shapes.iter().enumerate() {

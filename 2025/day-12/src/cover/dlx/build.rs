@@ -1,9 +1,9 @@
 pub use self::error::MatrixOverflowError;
 use super::*;
 
-/// Builder for a [`DLXMatrix`].
+/// Builder for a [`Matrix`].
 #[derive(Clone)]
-pub struct DLXBuilder {
+pub struct MatrixBuilder {
     col_headers: Box<[ColHeader]>,
     row_headers: Vec<RowHeader>,
     col_stack: Box<[NodeIndex]>,
@@ -60,37 +60,37 @@ impl Default for Constraint {
 }
 
 
-impl DLXBuilder {
-    /// Creates a new builder for a raw [`DLXMatrix`] with the specified number of constraints.
+impl MatrixBuilder {
+    /// Creates a new builder for a raw [`Matrix`] with the specified number of constraints.
     ///
     /// Use this method for simpler problems with _n_ required constraints. All constraints will have a cover-count of 1
-    /// by default. For more control, provide an iterator to [`DLXBuilder::from_constraints`].
+    /// by default. For more control, provide an iterator to [`MatrixBuilder::from_constraints`].
     ///
     /// # Panics
     ///
     /// This function will panic if too many columns (currently <code>[u32::MAX] - 1</code>) are specified. To create a
-    /// new [`DLXBuilder`] fallibly, see [`DLXBuilder::try_from_constraints`].
+    /// new [`MatrixBuilder`] fallibly, see [`MatrixBuilder::try_from_constraints`].
     pub fn new(num_constraints: usize) -> Self {
         Self::from_constraints(Constraint::default().repeat(num_constraints))
     }
 
-    /// Creates a new builder for a raw [`DLXMatrix`] with the specified number of required and optional constraints.
+    /// Creates a new builder for a raw [`Matrix`] with the specified number of required and optional constraints.
     ///
     /// Use this method for simpler problems with _n_ required constraints followed by _m_ optional constraints. All
     /// constraints will have a cover-count of 1 by default. For more control, provide an iterator to
-    /// [`DLXBuilder::from_constraints`].
+    /// [`MatrixBuilder::from_constraints`].
     ///
     /// # Panics
     ///
     /// This function will panic if the total number of columns is too large. The limit is currently <code>[u32::MAX] -
-    /// 1</code>. To create a new [`DLXBuilder`] fallibly, see [`DLXBuilder::try_from_constraints`].
+    /// 1</code>. To create a new [`MatrixBuilder`] fallibly, see [`MatrixBuilder::try_from_constraints`].
     pub fn new_with_optional(num_required: usize, num_optional: usize) -> Self {
         let req = Constraint::required().repeat(num_required);
         let opt = Constraint::optional().repeat(num_optional);
         Self::from_constraints(req.chain(opt))
     }
 
-    /// Creates a new builder for a raw [`DLXMatrix`] with the specified constraints in the specified order.
+    /// Creates a new builder for a raw [`Matrix`] with the specified constraints in the specified order.
     ///
     /// # Panics
     ///
@@ -104,7 +104,7 @@ impl DLXBuilder {
         }
     }
 
-    /// Creates a new builder for a raw [`DLXMatrix`] with the specified constraints in the specified order.
+    /// Creates a new builder for a raw [`Matrix`] with the specified constraints in the specified order.
     ///
     /// # Errors
     ///
@@ -192,7 +192,7 @@ impl DLXBuilder {
         self
     }
 
-    /// Pushes a new row into the [`DLXMatrix`].
+    /// Pushes a new row into the [`Matrix`].
     ///
     /// See [`try_push_row`][Self::try_push_row] for details about panics and errors.
     pub fn push_row(&mut self, constraint_indices: impl IntoIterator<Item = usize>) {
@@ -202,7 +202,7 @@ impl DLXBuilder {
         }
     }
 
-    /// Pushes a series of row into the [`DLXMatrix`].
+    /// Pushes a series of row into the [`Matrix`].
     ///
     /// See [`try_push_row`][Self::try_push_row] for details about panics and errors.
     pub fn push_rows<R: IntoIterator<Item = usize>>(&mut self, rows: impl IntoIterator<Item = R>) {
@@ -211,7 +211,7 @@ impl DLXBuilder {
         }
     }
 
-    /// Adds a new row to the [`DLXMatrix`].
+    /// Adds a new row to the [`Matrix`].
     ///
     /// Each row represents a "choice" in the cover problem. Rows are specified by listing the indices of the
     /// constraints (columns) they contain.
@@ -303,7 +303,7 @@ impl DLXBuilder {
         Ok(())
     }
 
-    pub fn finish(self) -> DLXMatrix {
+    pub fn finish(self) -> Matrix {
         // Once all rows have been placed, the last step is to loop down the column headers one last time and connect
         // them up to the things at the bottom of each column.
         let Self {
@@ -320,7 +320,7 @@ impl DLXBuilder {
             nodes[head.to_usize()].up = node_idx;
         }
 
-        DLXMatrix {
+        Matrix {
             col_headers,
             row_headers: row_headers.into_boxed_slice(),
             nodes: nodes.into_boxed_slice(),
@@ -328,7 +328,7 @@ impl DLXBuilder {
     }
 }
 
-/// Errors that may occur during building of a [`DLXMatrix`].
+/// Errors that may occur during building of a [`Matrix`].
 pub mod error {
     use std::fmt::Display;
 

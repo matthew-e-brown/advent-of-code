@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-/// An index into [`super::DLXMatrix::nodes`].
+/// An index into [`super::Matrix::nodes`].
 ///
 /// These are used as the main links to create the linked-lattice between the nodes.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,7 +18,7 @@ impl NodeIndex {
     }
 }
 
-/// An index that refers to a specific column in a [`DLXMatrix`][super::DLXMatrix].
+/// An index that refers to a specific column in a [`Matrix`][super::Matrix].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(in super::super) struct ColIndex(pub u32);
 
@@ -34,7 +34,7 @@ impl ColIndex {
     }
 }
 
-/// An index that refers to a specific row in a [`DLXMatrix`][super::DLXMatrix].
+/// An index that refers to a specific row in a [`Matrix`][super::Matrix].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(in super::super) struct RowIndex(pub u32);
 

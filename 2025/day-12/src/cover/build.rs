@@ -3,12 +3,12 @@ use std::hash::Hash;
 use indexmap::IndexSet;
 
 use self::error::BuildError;
-use super::raw::build as raw;
+use super::dlx::build as raw;
 
 pub struct ProblemBuilder<C, S> {
     col_labels: IndexSet<C>,
     row_labels: IndexSet<S>,
-    inner: raw::DLXBuilder,
+    inner: raw::MatrixBuilder,
 }
 
 /// Specification for a constraint during the creation of a [`CoverProblem`].
@@ -93,7 +93,7 @@ where
             }
         }
 
-        let inner = raw::DLXBuilder::try_from_constraints(raw_columns)?;
+        let inner = raw::MatrixBuilder::try_from_constraints(raw_columns)?;
         Ok(ProblemBuilder {
             col_labels,
             row_labels: IndexSet::new(),
@@ -133,7 +133,7 @@ pub mod error {
     use std::fmt::Display;
 
     use self::BuildErrorKind::ProblemTooLarge;
-    use super::super::raw::build::error::{MatrixOverflowError, MatrixOverflowKind};
+    use super::super::dlx::build::error::{MatrixOverflowError, MatrixOverflowKind};
 
     #[derive(Debug, Clone)]
     pub struct BuildError {

@@ -12,7 +12,7 @@ use self::index::*;
 ///
 /// Rows and columns are identified by their indices.
 #[derive(Clone, Debug)]
-pub struct DLXMatrix {
+pub struct Matrix {
     nodes: Box<[Node]>,
     col_headers: Box<[ColHeader]>,
     row_headers: Box<[RowHeader]>,
@@ -79,7 +79,7 @@ impl RowHeader {
     }
 }
 
-impl DLXMatrix {
+impl Matrix {
     pub fn search(&mut self) -> Option<Vec<usize>> {
         let mut solution = Vec::new();
         if self.search_recursive(&mut solution) {
@@ -153,7 +153,7 @@ enum ColumnResult {
     SearchFailure,
 }
 
-impl DLXMatrix {
+impl Matrix {
     fn root(&self) -> &Node {
         self.node(NodeIndex::ROOT)
     }
@@ -191,7 +191,7 @@ impl DLXMatrix {
     }
 }
 
-impl DLXMatrix {
+impl Matrix {
     /// Removes the given node from its row by modifying its left/right siblings to point to one another.
     fn remove_left_right(&mut self, index: NodeIndex) {
         let left = self.node(index).left;
