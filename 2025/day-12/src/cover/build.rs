@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 use indexmap::IndexSet;
 
@@ -7,15 +8,23 @@ use super::CoverProblem;
 use super::error::BuildError;
 use super::raw::build as raw;
 
-pub struct ConstraintsBuilder<C> {
+pub struct ConstraintsBuilder<C, S> {
     raw: raw::HeaderBuilder,
     col_labels: IndexSet<C>,
+    _row_labels: PhantomData<S>,
 }
 
 pub struct ProblemBuilder<C, S> {
     raw: raw::MatrixBuilder,
     col_labels: IndexSet<C>,
     row_labels: IndexSet<S>,
+}
+
+impl<C, S> CoverProblem<C, S> {
+    /// Creates a new [`ConstraintsBuilder`] to start constructing a [`CoverProblem`].
+    pub fn build() -> ConstraintsBuilder<C, S> {
+        ConstraintsBuilder::new()
+    }
 }
 
 /// Specification of a constraint during the creation of a [`CoverProblem`].
@@ -77,15 +86,13 @@ impl<C> Constraint<C> {
     }
 }
 
-impl<C> ConstraintsBuilder<C>
-where
-    C: Hash + Eq,
-{
+impl<C, S> ConstraintsBuilder<C, S> {
     /// Creates a new [`ConstraintsBuilder`] to start constructing a [`CoverProblem`].
     pub fn new() -> Self {
         ConstraintsBuilder {
             raw: raw::HeaderBuilder::new(),
             col_labels: IndexSet::new(),
+            _row_labels: PhantomData,
         }
     }
 
@@ -94,6 +101,17 @@ where
         self.raw.num_columns()
     }
 
+    /// Reserve space for at least `additional` more constraints.
+    pub fn reserve(&mut self, additional: usize) {
+        self.col_labels.reserve(additional);
+        self.raw.reserve(additional);
+    }
+}
+
+impl<C, S> ConstraintsBuilder<C, S>
+where
+    C: Hash + Eq,
+{
     // [TODO] doc comments
 
     pub fn try_push_constraint(&mut self, constraint: Constraint<C>) -> Result<(), BuildError> {
@@ -127,7 +145,7 @@ where
 
     // [TODO] Add the other `*_constraint(s?)` methods
 
-    pub fn finish_constraints<S>(self) -> ProblemBuilder<C, S> {
+    pub fn finish_constraints(self) -> ProblemBuilder<C, S> {
         ProblemBuilder {
             raw: self.raw.finish_columns(),
             col_labels: self.col_labels,
@@ -178,7 +196,9 @@ where
     }
 
     // [TODO] Add the other `*_subset(s?)` methods
+}
 
+impl<C, S> ProblemBuilder<C, S> {
     pub fn build(self) -> CoverProblem<C, S> {
         let Self { raw, col_labels, row_labels } = self;
         CoverProblem {

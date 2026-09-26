@@ -1,9 +1,8 @@
 mod cover;
 mod input;
 
-use indexmap::IndexSet;
-
-use self::cover::raw::build::{Column, MatrixBuilder};
+use self::cover::CoverProblem;
+use self::cover::build::Constraint;
 use self::input::Transform;
 
 fn main() {
@@ -41,26 +40,25 @@ fn main() {
             max_height = max_height.max(region.height());
         }
 
-        let mut col_labels = IndexSet::<Criteria>::new();
-        let mut row_labels = IndexSet::<Choice>::new();
-        let mut columns = Vec::with_capacity(shapes.len() + (max_width * max_height));
+        // [TODO] `with_capacity`?
+        let mut builder = CoverProblem::build();
+        builder.reserve(shapes.len() + (max_width * max_height));
 
         // For columns, we need:
         // - One required column for each present shape.
         // - One optional column for each of the tiles in the board.
         for i in 0..shapes.len() {
-            columns.push(Column::required()); // We will adjust the column counts later
-            col_labels.insert(Criteria::Present(i));
+            // We will adjust the column counts later
+            builder.try_push_constraint(Constraint::required(Criteria::Present(i))).unwrap();
         }
 
         for y in 0..max_height {
             for x in 0..max_width {
-                columns.push(Column::optional());
-                col_labels.insert(Criteria::Tile(x, y));
+                builder.try_push_constraint(Constraint::optional(Criteria::Tile(x, y))).unwrap();
             }
         }
 
-        let mut builder = MatrixBuilder::try_from_constraints(columns).unwrap();
+        let mut builder = builder.finish_constraints();
 
         // Now, for all possible positions of all possible
         for (i, shape) in shapes.iter().enumerate() {
@@ -71,24 +69,12 @@ fn main() {
                 while y + shape.height() < max_height {
                     let mut x = 0;
                     while x + shape.width() < max_width {
-                        // (i, (x, y), transform) now give us all the information we need to label the row.
-                        row_labels.insert(Choice {
-                            present: i,
-                            position: (x, y),
-                            orientation: transform,
-                        });
+                        // (i, (x, y), transform) now give us all the information we need to label the choice. Now we
+                        // just need to figure out which columns it intersects with.
+                        let placement = PresentPlacement { index: i, position: (x, y), transform };
+                        let subset = shape.points().into_iter().map(|&(px, py)| Criteria::Tile(x + px, y + py));
 
-                        // Now we just need to figure out which columns it intersects with.
-                        let col_indices = shape.points().into_iter().map(|&(px, py)| {
-                            let tx = x + px;
-                            let ty = y + py;
-                            let col = Criteria::Tile(tx, ty);
-                            col_labels
-                                .get_index_of(&col)
-                                .expect("all tiles should have been added to the matrix")
-                        });
-
-                        builder.try_push_row(col_indices).unwrap();
+                        builder.try_push_subset(placement, subset).unwrap();
 
                         x += 1;
                     }
@@ -97,11 +83,11 @@ fn main() {
             }
         }
 
-        let mut matrix = builder.finish();
+        let mut problem = builder.build();
 
         // Now, for each region, do a prepared search where we configure the columns first.
         for (i, region) in possible_regions.iter().enumerate() {
-            let result = matrix.prepared_search(|idx| match &col_labels[idx] {
+            let result = problem.prepared_search(|idx| match &col_labels[idx] {
                 &Criteria::Tile(x, y) => region.is_in_bounds(x, y).then_some(1).unwrap_or(0),
                 &Criteria::Present(i) => region.counts()[i],
             });
@@ -125,8 +111,8 @@ enum Criteria {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Choice {
-    present: usize,
+struct PresentPlacement {
+    index: usize,
     position: (usize, usize),
-    orientation: Transform,
+    transform: Transform,
 }
