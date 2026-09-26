@@ -1,8 +1,7 @@
 mod cover;
 mod input;
 
-use self::cover::CoverProblem;
-use self::cover::build::Constraint;
+use self::cover::raw::{Matrix, build};
 use self::input::Transform;
 
 fn main() {
@@ -40,25 +39,35 @@ fn main() {
             max_height = max_height.max(region.height());
         }
 
-        // [TODO] `with_capacity`?
-        let mut builder = CoverProblem::build();
-        builder.reserve(shapes.len() + (max_width * max_height));
+        // [TODO] Do I even need a whole separate "high-level" API? Or does the improved builder API make it simple
+        // enough to just make the IndexMaps out here... Honestly, I think it might...
 
         // For columns, we need:
         // - One required column for each present shape.
         // - One optional column for each of the tiles in the board.
+        let num_cols = shapes.len() + (max_width * max_height);
+        let mut col_labels = indexmap::IndexSet::<Criteria>::with_capacity(num_cols);
+        let mut row_labels = indexmap::IndexSet::<PresentPlacement>::new();
+
+        // [TODO] `with_capacity`?
+        let mut builder = Matrix::builder();
+
         for i in 0..shapes.len() {
-            // We will adjust the column counts later
-            builder.try_push_constraint(Constraint::required(Criteria::Present(i))).unwrap();
+            // We will adjust the column counts later.
+            col_labels.insert(Criteria::Present(i));
+            builder.push_column(build::Column::required());
+            // [TODO] `builder.column().required()` would be better; .column() would push a new one into the list and
+            // return a `&mut` (right now this specific method just returns `()`).
         }
 
         for y in 0..max_height {
             for x in 0..max_width {
-                builder.try_push_constraint(Constraint::optional(Criteria::Tile(x, y))).unwrap();
+                col_labels.insert(Criteria::Tile(x, y));
+                builder.push_column(build::Column::optional());
             }
         }
 
-        let mut builder = builder.finish_constraints();
+        let mut builder = builder.finish_columns();
 
         // Now, for all possible positions of all possible
         for (i, shape) in shapes.iter().enumerate() {
@@ -71,10 +80,18 @@ fn main() {
                     while x + shape.width() < max_width {
                         // (i, (x, y), transform) now give us all the information we need to label the choice. Now we
                         // just need to figure out which columns it intersects with.
-                        let placement = PresentPlacement { index: i, position: (x, y), transform };
-                        let subset = shape.points().into_iter().map(|&(px, py)| Criteria::Tile(x + px, y + py));
+                        row_labels.insert(PresentPlacement { index: i, position: (x, y), transform });
 
-                        builder.try_push_subset(placement, subset).unwrap();
+                        let columns = shape.points().into_iter().map(|&(px, py)| {
+                            // - There are `shape.len()` points before tile (0, 0).
+                            // - Then the tiles (x, 0) live at indices (shapes.len() + x);
+                            // - Then, the tiles (x, y) live at (shapes.len() + x + (max_width * y)).
+                            let tx = x + px;
+                            let ty = y + py;
+                            shapes.len() + tx + (ty * max_width)
+                        });
+
+                        builder.push_row(columns);
 
                         x += 1;
                     }
@@ -87,9 +104,9 @@ fn main() {
 
         // Now, for each region, do a prepared search where we configure the columns first.
         for (i, region) in possible_regions.iter().enumerate() {
-            let result = problem.prepared_search(|idx| match &col_labels[idx] {
-                &Criteria::Tile(x, y) => region.is_in_bounds(x, y).then_some(1).unwrap_or(0),
-                &Criteria::Present(i) => region.counts()[i],
+            let result = problem.prepared_search(|idx| match col_labels[idx] {
+                Criteria::Present(i) => region.counts()[i],
+                Criteria::Tile(x, y) => region.is_in_bounds(x, y).then_some(1).unwrap_or(0),
             });
 
             match result {
@@ -106,8 +123,8 @@ fn main() {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Criteria {
-    Tile(usize, usize),
     Present(usize),
+    Tile(usize, usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
