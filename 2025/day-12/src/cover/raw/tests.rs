@@ -1,4 +1,4 @@
-use super::build::{Constraint, MatrixBuilder};
+use super::build::{Column, MatrixBuilder};
 use super::{ColIndex, Node, NodeIndex, RowIndex};
 
 /// Creates a new `Node { ... }` literal by manually specifying indices in `U, D, L, R` order.
@@ -43,7 +43,7 @@ macro_rules! node {
 /// ```
 #[test]
 fn build_simple() {
-    let constraints = Constraint::required().repeat(4);
+    let constraints = Column::required().repeat(4);
     let matrix = MatrixBuilder::from_constraints(constraints)
         .row([0, 2])
         .row([0, 2, 3])
@@ -78,7 +78,7 @@ fn build_simple() {
 /// Solves the "simple" example from above.
 #[test]
 fn solve_simple() {
-    let constraints = Constraint::required().repeat(4);
+    let constraints = Column::required().repeat(4);
     let mut matrix = MatrixBuilder::from_constraints(constraints)
         .row([0, 2])
         .row([0, 2, 3])
@@ -108,7 +108,7 @@ fn solve_simple() {
 /// ```
 #[test]
 fn solve_wikipedia() {
-    let constraints = Constraint::required().repeat(7);
+    let constraints = Column::required().repeat(7);
     let mut matrix = MatrixBuilder::from_constraints(constraints)
         .row([0, 3, 6])
         .row([0, 3])
@@ -126,11 +126,11 @@ fn solve_wikipedia() {
 #[test]
 fn solve_notebook() {
     let constraints = [
-        Constraint::required().with_count(2),
-        Constraint::required().with_count(1),
+        Column::required().with_count(2),
+        Column::required().with_count(1),
     ]
     .into_iter()
-    .chain(Constraint::optional().repeat(8));
+    .chain(Column::optional().repeat(8));
 
     let rows: [&[usize]; 9] = [
         &[0, 2, 3],

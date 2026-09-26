@@ -1,4 +1,4 @@
-pub use self::error::MatrixOverflowError;
+use super::error::MatrixOverflowError;
 use super::*;
 
 /// Builder for a [`Matrix`].
@@ -20,31 +20,31 @@ pub struct MatrixBuilder {
 ///   considered solved.
 /// - An optional column with count `n` may be covered **at most** `n` times.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Constraint {
+pub struct Column {
     pub count: usize,
     pub optional: bool,
 }
 
 #[allow(dead_code)]
-impl Constraint {
+impl Column {
     pub const fn required() -> Self {
-        Constraint { count: 1, optional: false }
+        Column { count: 1, optional: false }
     }
 
     pub const fn optional() -> Self {
-        Constraint { count: 1, optional: true }
+        Column { count: 1, optional: true }
     }
 
     pub const fn with_count(self, count: usize) -> Self {
-        Constraint { count, ..self }
+        Column { count, ..self }
     }
 
     pub const fn to_required(self) -> Self {
-        Constraint { optional: false, ..self }
+        Column { optional: false, ..self }
     }
 
     pub const fn to_optional(self) -> Self {
-        Constraint { optional: true, ..self }
+        Column { optional: true, ..self }
     }
 
     /// Returns an iterator that repeats this criterion specification multiple times.
@@ -53,7 +53,7 @@ impl Constraint {
     }
 }
 
-impl Default for Constraint {
+impl Default for Column {
     fn default() -> Self {
         Self::required().with_count(1)
     }
@@ -71,7 +71,7 @@ impl MatrixBuilder {
     /// This function will panic if too many columns (currently <code>[u32::MAX] - 1</code>) are specified. To create a
     /// new [`MatrixBuilder`] fallibly, see [`MatrixBuilder::try_from_constraints`].
     pub fn new(num_constraints: usize) -> Self {
-        Self::from_constraints(Constraint::default().repeat(num_constraints))
+        Self::from_constraints(Column::default().repeat(num_constraints))
     }
 
     /// Creates a new builder for a raw [`Matrix`] with the specified number of required and optional constraints.
@@ -85,8 +85,8 @@ impl MatrixBuilder {
     /// This function will panic if the total number of columns is too large. The limit is currently <code>[u32::MAX] -
     /// 1</code>. To create a new [`MatrixBuilder`] fallibly, see [`MatrixBuilder::try_from_constraints`].
     pub fn new_with_optional(num_required: usize, num_optional: usize) -> Self {
-        let req = Constraint::required().repeat(num_required);
-        let opt = Constraint::optional().repeat(num_optional);
+        let req = Column::required().repeat(num_required);
+        let opt = Column::optional().repeat(num_optional);
         Self::from_constraints(req.chain(opt))
     }
 
@@ -97,7 +97,7 @@ impl MatrixBuilder {
     /// This function will panic if too many columns are specified. Currently, the limit is <code>[u32::MAX] - 1</code>.
     ///
     /// See [`try_from_constraints`][Self::try_from_constraints] for a fallible version of this method.
-    pub fn from_constraints(constraints: impl IntoIterator<Item = Constraint>) -> Self {
+    pub fn from_constraints(constraints: impl IntoIterator<Item = Column>) -> Self {
         match Self::try_from_constraints(constraints) {
             Ok(builder) => builder,
             Err(err) => panic!("failed to create DLX builder: {err}"),
@@ -109,9 +109,7 @@ impl MatrixBuilder {
     /// # Errors
     ///
     /// This function will fail if too many columns are specified. Currently, the limit is <code>[u32::MAX] - 1</code>.
-    pub fn try_from_constraints(
-        constraints: impl IntoIterator<Item = Constraint>,
-    ) -> Result<Self, MatrixOverflowError> {
+    pub fn try_from_constraints(constraints: impl IntoIterator<Item = Column>) -> Result<Self, MatrixOverflowError> {
         let mut col_headers = Vec::new();
         let mut nodes = Vec::new();
 
@@ -127,7 +125,7 @@ impl MatrixBuilder {
 
         // Each step, we reach backwards to the last non-optional node and link it to the newest node.
         let mut prev_req = NodeIndex::ROOT; // root node = index 0
-        for Constraint { count, optional } in constraints {
+        for Column { count, optional } in constraints {
             let row_idx = RowIndex::NONE;
             let col_idx = ColIndex::try_from(col_headers.len())?;
             let node_idx = NodeIndex::try_from(nodes.len())?;

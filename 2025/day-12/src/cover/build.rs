@@ -11,9 +11,17 @@ pub struct ProblemBuilder<C, S> {
     inner: raw::MatrixBuilder,
 }
 
-/// Specification for a constraint during the creation of a [`CoverProblem`].
+/// Specification of a constraint during the creation of a [`CoverProblem`].
 ///
-/// Every constraint has a "cover count" associated with it. This count determines how many times subsets ...[TODO]
+/// Every constraint has a "cover count" associated with it. This count determines how many times subsets containing it
+/// may be selected as part of a solution. Once a constraint has been covered by `n` subsets, it and all remaining
+/// subsets which contain it are removed from consideration for the rest of the search.
+///
+/// Additionally, each constraint may be either _required_ or _optional:_
+///
+/// - A **required** constraint with count `n` **must** be covered exactly `n` times before its associated cover problem
+///   is considered solved.
+/// - An **optional** constraint with count `n` may be covered **at most** `n` times.
 ///
 /// [`CoverProblem`]: super::CoverProblem
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -24,9 +32,9 @@ pub struct Constraint<C> {
 }
 
 impl<C> Constraint<C> {
-    /// Creates a [`raw`] version of this constraint.
-    pub const fn as_raw(&self) -> raw::Constraint {
-        raw::Constraint {
+    /// Creates a [`raw::Column`] version of this constraint.
+    pub const fn as_raw_column(&self) -> raw::Column {
+        raw::Column {
             count: self.count,
             optional: self.optional,
         }
@@ -87,7 +95,7 @@ where
         //   can become `as_raw_column` or something more descriptive).
 
         for constraint in constraints {
-            raw_columns.push(constraint.as_raw());
+            raw_columns.push(constraint.as_raw_column());
             if !col_labels.insert(constraint.label) {
                 return Err(BuildError::duplicate_constraint());
             }
