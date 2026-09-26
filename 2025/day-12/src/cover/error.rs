@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use self::BuildErrorKind::ProblemTooLarge;
 use super::raw::error::{MatrixOverflowError, MatrixOverflowKind};
 
 #[derive(Debug, Clone)]
@@ -18,10 +17,8 @@ pub enum BuildErrorKind {
 impl Display for BuildError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
-            BuildErrorKind::DuplicateConstraint => {
-                write!(f, "encountered multiple constraints with the same label")
-            },
-            BuildErrorKind::DuplicateSubset => write!(f, "encountered multiple choices with the same label"),
+            BuildErrorKind::DuplicateConstraint => write!(f, "encountered multiple constraints with the same label"),
+            BuildErrorKind::DuplicateSubset => write!(f, "encountered multiple subsets with the same label"),
             BuildErrorKind::ProblemTooLarge(inner) => match inner.kind() {
                 MatrixOverflowKind::Cols => write!(f, "cover problem overflowed: too many constraints"),
                 MatrixOverflowKind::Rows => write!(f, "cover problem overflowed: too many subsets"),
@@ -51,10 +48,16 @@ impl BuildError {
     pub(super) fn duplicate_subset() -> Self {
         Self { kind: BuildErrorKind::DuplicateSubset }
     }
+
+    pub(super) fn too_large(inner: MatrixOverflowError) -> Self {
+        inner.into()
+    }
 }
 
 impl From<MatrixOverflowError> for BuildError {
     fn from(inner: MatrixOverflowError) -> Self {
-        BuildError { kind: ProblemTooLarge(inner) }
+        Self {
+            kind: BuildErrorKind::ProblemTooLarge(inner),
+        }
     }
 }

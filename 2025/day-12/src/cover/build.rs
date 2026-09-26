@@ -1,14 +1,21 @@
+use std::borrow::Borrow;
 use std::hash::Hash;
 
 use indexmap::IndexSet;
 
+use super::CoverProblem;
 use super::error::BuildError;
 use super::raw::build as raw;
 
+pub struct ConstraintsBuilder<C> {
+    raw: raw::HeaderBuilder,
+    col_labels: IndexSet<C>,
+}
+
 pub struct ProblemBuilder<C, S> {
+    raw: raw::MatrixBuilder,
     col_labels: IndexSet<C>,
     row_labels: IndexSet<S>,
-    inner: raw::MatrixBuilder,
 }
 
 /// Specification of a constraint during the creation of a [`CoverProblem`].
@@ -40,6 +47,12 @@ impl<C> Constraint<C> {
         }
     }
 
+    /// Decomposes this constraint into its label and a [`raw::Column`].
+    pub fn into_raw(self) -> (C, raw::Column) {
+        let Self { label, count, optional } = self;
+        (label, raw::Column { count, optional })
+    }
+
     pub const fn required(label: C) -> Self {
         Constraint { label, count: 1, optional: false }
     }
@@ -64,49 +77,62 @@ impl<C> Constraint<C> {
     }
 }
 
-impl<C: Clone> Constraint<C> {
-    /// Returns an iterator that repeats this criterion specification multiple times.
-    pub fn repeat(self, n: usize) -> std::iter::RepeatN<Self> {
-        std::iter::repeat_n(self, n)
-    }
-}
-
-impl<C, S> ProblemBuilder<C, S>
+impl<C> ConstraintsBuilder<C>
 where
     C: Hash + Eq,
 {
-    pub fn new(constraints: impl IntoIterator<Item = Constraint<C>>) -> Result<Self, BuildError> {
-        let mut col_labels = IndexSet::new();
-        let mut raw_columns = Vec::new();
+    /// Creates a new [`ConstraintsBuilder`] to start constructing a [`CoverProblem`].
+    pub fn new() -> Self {
+        ConstraintsBuilder {
+            raw: raw::HeaderBuilder::new(),
+            col_labels: IndexSet::new(),
+        }
+    }
 
-        // [TODO]
-        //
-        // It's not nice how we have to iterate through this list twice (we do it once so we can stop at an error, and
-        // then the inner builder loops through the columns again). Now that I am looking at this again, what should
-        // happen is more clear:
-        //
-        // - The inner really should have two states: one for columns, and one for rows
-        // - Call them `dlx::HeaderBuilder` and `dlx::MatrixBuilder`.
-        // - The inner `try_from_constraints` function then gets broken up:
-        //   - Pushing the root node in happens when the `HeaderBuilder` is created
-        //   - The main loop is then a single `push_column` method
-        //   - The part after the main loop happens when converting from `HeaderBuilder` to `MatrixBuilder`.
-        // - (also I wanna rename `raw` to `dlx` and `raw::Constraint` to `dlx::Column`, then `Constraint::<C>::as_raw`
-        //   can become `as_raw_column` or something more descriptive).
+    /// Returns the number of constraints in this builder.
+    pub const fn num_constraints(&self) -> usize {
+        self.raw.num_columns()
+    }
 
-        for constraint in constraints {
-            raw_columns.push(constraint.as_raw_column());
-            if !col_labels.insert(constraint.label) {
-                return Err(BuildError::duplicate_constraint());
-            }
+    // [TODO] doc comments
+
+    pub fn try_push_constraint(&mut self, constraint: Constraint<C>) -> Result<(), BuildError> {
+        let (label, column) = constraint.into_raw();
+
+        if !self.col_labels.insert(label) {
+            return Err(BuildError::duplicate_constraint());
         }
 
-        let inner = raw::MatrixBuilder::try_from_constraints(raw_columns)?;
-        Ok(ProblemBuilder {
-            col_labels,
+        self.raw.try_push_column(column).map_err(BuildError::from)
+    }
+
+    pub fn try_push_constraints(
+        &mut self,
+        constraints: impl IntoIterator<Item = Constraint<C>>,
+    ) -> Result<(), BuildError> {
+        let constraints = constraints.into_iter();
+        let est_len = match constraints.size_hint() {
+            (_, Some(max)) => max,
+            (min, None) => min,
+        };
+
+        self.col_labels.reserve(est_len);
+        self.raw.reserve(est_len);
+        for constraint in constraints {
+            self.try_push_constraint(constraint)?;
+        }
+
+        Ok(())
+    }
+
+    // [TODO] Add the other `*_constraint(s?)` methods
+
+    pub fn finish_constraints<S>(self) -> ProblemBuilder<C, S> {
+        ProblemBuilder {
+            raw: self.raw.finish_columns(),
+            col_labels: self.col_labels,
             row_labels: IndexSet::new(),
-            inner,
-        })
+        }
     }
 }
 
@@ -115,24 +141,73 @@ where
     C: Hash + Eq,
     S: Hash + Eq,
 {
-    pub fn try_push_subset<'a, Q>(
-        &mut self,
-        label: S,
-        constraints: impl IntoIterator<Item = &'a Q>,
-    ) -> Result<(), BuildError>
-    where
-        Q: ?Sized + Hash + indexmap::Equivalent<C> + 'a,
-    {
+    // [TODO] doc comments
+
+    pub fn try_push_subset<Q: Subset<C>>(&mut self, label: S, subset: Q) -> Result<(), BuildError> {
         if !self.row_labels.insert(label) {
             return Err(BuildError::duplicate_subset());
         }
 
-        self.inner
-            .try_push_row(constraints.into_iter().map(|label| match self.col_labels.get_index_of(label) {
+        self.raw.try_push_row(subset.constraint_labels().map(|label| {
+            match self.col_labels.get_index_of(label.borrow()) {
                 Some(index) => index,
-                None => panic!("subset contains unknown constraint label"),
-            }))?;
+                None => panic!("subset references unknown constraint label"), // should this be a proper error variant?
+            }
+        }))?;
 
         Ok(())
+    }
+
+    pub fn try_push_subsets<Q: Subset<C>>(
+        &mut self,
+        subsets: impl IntoIterator<Item = (S, Q)>,
+    ) -> Result<(), BuildError> {
+        let subsets = subsets.into_iter();
+        let est_len = match subsets.size_hint() {
+            (_, Some(max)) => max,
+            (min, None) => min,
+        };
+
+        self.row_labels.reserve(est_len);
+        self.raw.reserve(est_len);
+        for (label, subset) in subsets {
+            self.try_push_subset(label, subset)?;
+        }
+
+        Ok(())
+    }
+
+    // [TODO] Add the other `*_subset(s?)` methods
+
+    pub fn build(self) -> CoverProblem<C, S> {
+        let Self { raw, col_labels, row_labels } = self;
+        CoverProblem {
+            matrix: raw.build(),
+            col_labels,
+            row_labels,
+        }
+    }
+}
+
+/// Items that specify a subset of constraints during construction of a [`CoverProblem`].
+///
+/// This trait is automatically implemented for any iterator of types that implement <code>[`Borrow<C>`] + [`Hash`] +
+/// [`indexmap::Equivalent<C>`]</code>.
+pub trait Subset<C> {
+    type Label: Borrow<C> + Hash + indexmap::Equivalent<C>;
+
+    /// Gets an iterator over the constraints this subset contains.
+    fn constraint_labels(self) -> impl Iterator<Item = Self::Label>;
+}
+
+impl<I, C, Q> Subset<C> for I
+where
+    I: IntoIterator<Item = Q>,
+    Q: Borrow<C> + Hash + indexmap::Equivalent<C>,
+{
+    type Label = Q;
+
+    fn constraint_labels(self) -> impl Iterator<Item = Self::Label> {
+        self.into_iter()
     }
 }

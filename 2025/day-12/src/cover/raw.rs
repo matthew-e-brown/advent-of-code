@@ -2,7 +2,6 @@
 
 pub mod build;
 pub mod error;
-pub mod new_build;
 #[cfg(test)] mod tests;
 
 /// A matrix that implements a modified version of Donald Knuth's _Algorithm X._

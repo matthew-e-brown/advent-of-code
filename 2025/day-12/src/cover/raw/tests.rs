@@ -1,5 +1,5 @@
-use super::build::{Column, MatrixBuilder};
-use super::{ColIndex, Node, NodeIndex, RowIndex};
+use super::build::Column;
+use super::{ColIndex, Matrix, Node, NodeIndex, RowIndex};
 
 /// Creates a new `Node { ... }` literal by manually specifying indices in `U, D, L, R` order.
 ///
@@ -43,13 +43,11 @@ macro_rules! node {
 /// ```
 #[test]
 fn build_simple() {
-    let constraints = Column::required().repeat(4);
-    let matrix = MatrixBuilder::from_constraints(constraints)
-        .row([0, 2])
-        .row([0, 2, 3])
-        .row([1])
-        .row([2, 3])
-        .finish();
+    let matrix = Matrix::builder()
+        .add_columns(Column::required().repeat(4))
+        .finish_columns()
+        .add_rows([&[0, 2], &[0, 2, 3], &[1], &[2, 3]] as [&[usize]; _])
+        .build();
 
     // To ensure valid construction, we manually specify what the nodes should look like:
     #[rustfmt::skip]
@@ -78,13 +76,11 @@ fn build_simple() {
 /// Solves the "simple" example from above.
 #[test]
 fn solve_simple() {
-    let constraints = Column::required().repeat(4);
-    let mut matrix = MatrixBuilder::from_constraints(constraints)
-        .row([0, 2])
-        .row([0, 2, 3])
-        .row([1])
-        .row([2, 3])
-        .finish();
+    let mut matrix = Matrix::builder()
+        .add_columns(Column::required().repeat(4))
+        .finish_columns()
+        .add_rows([&[0, 2], &[0, 2, 3], &[1], &[2, 3]] as [&[usize]; _])
+        .build();
 
     let solution = matrix.search();
     println!("Solution: {solution:?}");
@@ -108,15 +104,16 @@ fn solve_simple() {
 /// ```
 #[test]
 fn solve_wikipedia() {
-    let constraints = Column::required().repeat(7);
-    let mut matrix = MatrixBuilder::from_constraints(constraints)
-        .row([0, 3, 6])
-        .row([0, 3])
-        .row([3, 4, 6])
-        .row([2, 4, 5])
-        .row([1, 2, 5])
-        .row([1, 6])
-        .finish();
+    let mut matrix = Matrix::builder()
+        .add_columns(Column::required().repeat(7))
+        .finish_columns()
+        .add_row([0, 3, 6])
+        .add_row([0, 3])
+        .add_row([3, 4, 6])
+        .add_row([2, 4, 5])
+        .add_row([1, 2, 5])
+        .add_row([1, 6])
+        .build();
 
     let solution = matrix.search();
     println!("Solution: {solution:?}");
@@ -125,31 +122,24 @@ fn solve_wikipedia() {
 /// Solves an example from my notebook.
 #[test]
 fn solve_notebook() {
-    let constraints = [
-        Column::required().with_count(2),
-        Column::required().with_count(1),
-    ]
-    .into_iter()
-    .chain(Column::optional().repeat(8));
+    let mut matrix = Matrix::builder()
+        .add_column(Column::required().with_count(2))
+        .add_column(Column::required().with_count(1))
+        .add_columns(Column::optional().repeat(8))
+        .finish_columns()
+        .add_rows([
+            &[0, 2, 3],
+            &[0, 3, 4],
+            &[0, 4, 5],
+            &[0, 5, 6],
+            &[0, 6, 7],
+            &[0, 8, 9],
+            &[1, 3, 6, 7],
+            &[1, 4, 7, 8],
+            &[1, 5, 8, 9],
+        ] as [&[usize]; _])
+        .build();
 
-    let rows: [&[usize]; 9] = [
-        &[0, 2, 3],
-        &[0, 3, 4],
-        &[0, 4, 5],
-        &[0, 5, 6],
-        &[0, 6, 7],
-        &[0, 8, 9],
-        &[1, 3, 6, 7],
-        &[1, 4, 7, 8],
-        &[1, 5, 8, 9],
-    ];
-
-    let mut builder = MatrixBuilder::from_constraints(constraints);
-    for row in rows {
-        builder.push_row(row.into_iter().copied());
-    }
-
-    let mut matrix = builder.finish();
     let solution = matrix.search();
     println!("Solution: {solution:?}");
 }
